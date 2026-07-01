@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+uv.lock.tmp
+
+# Generated / scratch data artifacts
+*.parquet
+!tests/**/fixtures/**/*.parquet
+/scratch/
+/tmp-data/
+
+# Java / Gradle (future orchestrator sub-project)
+.gradle/
+target/
+
+# Node (future frontend sub-project)
+node_modules/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
