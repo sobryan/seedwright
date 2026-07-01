@@ -86,18 +86,21 @@ Defaults are in the spec (§11); these still need a call: **OPEN-3** (v1 DB matr
 This is a polyglot monorepo built bottom-up (see `docs/decisions/0001-*` and `docs/journal/`). Current state:
 
 - **`generation-library/`** (sub-project A, Python) — **built, Slice 1 complete** (92 tests green). The deterministic substrate: seeded RNG, canonical types, generators, single-table + cross-table FK generation, Parquet writer, Load-Plan emitter, determinism gate.
-- Not yet built: Postgres/MCP loader (C), authoring loop (B), validation suite, CLI, Spring orchestrator (D), React UI (E).
+- **`postgres-loader/`** (sub-project C, Python) — **built, Slice 2 complete** (101 tests + 5 skippable integration; see `docs/decisions/0002-*`). Consumes canonical Parquet + Load-Plan JSON (no genlib dep). Pure offline layer: `safesql` (namespace/identifier injection guard), `pgtypes`, `plan`, `ddl` (NOT-NULL-only), `copy` (COPY text encoder), `typecheck` (plan/Parquet type-agreement), `results`. Integration `executor` (psycopg): scoped load/teardown, marker-guarded drop, one txn with `search_path=''`+UTC.
+- Not yet built: authoring loop (B), validation suite, CLI, Spring orchestrator (D), React UI (E).
 
-Generation Library (uses `uv`, Python 3.12+; `cd generation-library` first):
+Each Python sub-project uses `uv` (`cd <dir>` first). **generation-library** is Python 3.12+ (resolves to 3.14); **postgres-loader** is pinned to 3.12 (psycopg wheels).
 
 ```bash
 uv sync                     # create venv + install deps (first time)
-uv run pytest               # full regression suite (incl. @slow) — run on EVERY change
-uv run pytest -m "not slow" # fast loop
-uv run pytest -m slow       # ~1M-row scale test only
-uv run pytest tests/test_rng.py::test_derive_seed_is_stable_across_processes  # single test
+uv run pytest               # full regression suite — run on EVERY change
+uv run pytest -m "not slow" # fast loop (generation-library)
+uv run pytest -m slow       # ~1M-row scale test (generation-library)
 uv run ruff check .         # lint (must be clean)
 uv run mypy                 # type-check src (strict; must be clean)
+
+# postgres-loader integration tests (need a live Postgres; auto-skip otherwise):
+SEEDWRIGHT_TEST_PG_DSN=postgresql://user:pass@localhost/db uv run pytest -m integration
 ```
 
 **Regression discipline (per user directive):** every feature is TDD'd (RED→GREEN→REFACTOR) and the **entire** suite is run before a feature is considered done. The suite *is* the regression corpus. Keep it green; keep it fast.
