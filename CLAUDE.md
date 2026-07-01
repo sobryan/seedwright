@@ -87,9 +87,10 @@ This is a polyglot monorepo built bottom-up (see `docs/decisions/0001-*` and `do
 
 - **`generation-library/`** (sub-project A, Python) — **built, Slice 1 complete** (92 tests green). The deterministic substrate: seeded RNG, canonical types, generators, single-table + cross-table FK generation, Parquet writer, Load-Plan emitter, determinism gate.
 - **`postgres-loader/`** (sub-project C, Python) — **built, Slice 2 complete** (101 tests + 5 skippable integration; see `docs/decisions/0002-*`). Consumes canonical Parquet + Load-Plan JSON (no genlib dep). Pure offline layer: `safesql` (namespace/identifier injection guard), `pgtypes`, `plan`, `ddl` (NOT-NULL-only), `copy` (COPY text encoder), `typecheck` (plan/Parquet type-agreement), `results`. Integration `executor` (psycopg): scoped load/teardown, marker-guarded drop, one txn with `search_path=''`+UTC.
-- Not yet built: authoring loop (B), validation suite, CLI, Spring orchestrator (D), React UI (E).
+- **`authoring/`** (sub-project B, Python) — **built, Slice 3 complete** (62 tests; see `docs/decisions/0003-*`). The model-agnostic evaluator-optimizer. Path-depends on genlib. Model emits a declarative genspec (JSON) → `validate` → `compile` into genlib `SchemaSpec` → sample → `judge` (data-tests from declared rules) → refine → determinism gate → `GeneratorArtifacts` (PENDING_APPROVAL). Offline via a scripted mock provider; real LLM adapters slot in behind the `provider` protocol.
+- Not yet built: real provider adapters, end-to-end CLI, validation suite service, Spring orchestrator (D), React UI (E).
 
-Each Python sub-project uses `uv` (`cd <dir>` first). **generation-library** is Python 3.12+ (resolves to 3.14); **postgres-loader** is pinned to 3.12 (psycopg wheels).
+Each Python sub-project uses `uv` (`cd <dir>` first). **generation-library** + **authoring** are Python 3.12+ (resolve to 3.14); **postgres-loader** is pinned to 3.12 (psycopg wheels). The two-phase keystone is now proven end-to-end: **authoring** (B) writes artifacts → genlib (A) executes them deterministically → **loader** (C) materializes to Postgres.
 
 ```bash
 uv sync                     # create venv + install deps (first time)
