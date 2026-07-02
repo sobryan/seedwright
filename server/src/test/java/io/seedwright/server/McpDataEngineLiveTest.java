@@ -50,7 +50,8 @@ class McpDataEngineLiveTest {
                     List.of(),
                     null,
                     Map.of("customers", 10),
-                    7L);
+                    7L,
+                    "heuristic");
 
             assertThat((String) artifacts.get("version")).startsWith("ga_");
             Map<?, ?> provenance = (Map<?, ?>) artifacts.get("provenance");

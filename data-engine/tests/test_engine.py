@@ -102,3 +102,24 @@ def test_validate_flags_a_violated_rule(tmp_path: Path) -> None:
                           data_tests=tests)
     assert report["passed"] is False
     assert any(f["column"] == "tier" for f in report["failures"])
+
+
+def test_run_author_dispatches_provider() -> None:
+    import pytest
+
+    from seedwright_data_engine.engine import UnknownProviderError
+
+    with pytest.raises(UnknownProviderError):
+        run_author(schema=SCHEMA, rules=[], provider="gpt-nonexistent")
+
+
+def test_run_author_copilot_uses_injected_runner() -> None:
+    # provider="copilot-cli" with an injected runner (test seam; no real CLI)
+    import json as _json
+
+    from tests.test_copilot_provider import GOOD_GENSPEC
+
+    artifacts = run_author(schema=SCHEMA, rules=RULES, foreign_keys=FOREIGN_KEYS,
+                           volumes={"customers": 30}, seed=7, provider="copilot-cli",
+                           _copilot_runner=lambda prompt: _json.dumps(GOOD_GENSPEC))
+    assert artifacts["provenance"]["provider_id"] == "copilot-cli"

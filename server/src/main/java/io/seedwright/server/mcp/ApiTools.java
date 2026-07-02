@@ -90,7 +90,9 @@ public class ApiTools {
                                 + "primary_key: [..]}}; foreign_keys = {table: [{column, "
                                 + "references_table, references_column, min_per_parent, "
                                 + "max_per_parent}]}; rules = [{table, column, enum|min_value|"
-                                + "max_value}]; volumes = {table: row_count}.",
+                                + "max_value}]; volumes = {table: row_count}; provider = "
+                                + "'heuristic' (default, no LLM) or 'copilot-cli' (GitHub "
+                                + "Copilot CLI authors the generator).",
                         Map.of("type", "object",
                                 "properties", Map.of(
                                         "name", Map.of("type", "string"),
@@ -99,7 +101,8 @@ public class ApiTools {
                                         "rules", Map.of("type", "array"),
                                         "foreign_keys", Map.of("type", "object"),
                                         "volumes", Map.of("type", "object"),
-                                        "seed", Map.of("type", "integer")),
+                                        "seed", Map.of("type", "integer"),
+                                        "provider", Map.of("type", "string")),
                                 "required", List.of("name", "schema")),
                         this::createBlueprint),
 
@@ -191,7 +194,8 @@ public class ApiTools {
                 asList(args.get("rules")),
                 asMap(args.get("foreign_keys")),
                 asMap(args.get("volumes")),
-                args.get("seed") instanceof Number n ? n.longValue() : null);
+                args.get("seed") instanceof Number n ? n.longValue() : null,
+                (String) args.get("provider"));
         return blueprintSummary(entity);
     }
 
@@ -281,6 +285,7 @@ public class ApiTools {
         dto.put("status", entity.getStatus());
         dto.put("seed", entity.getSeed());
         dto.put("artifactsVersion", entity.getArtifactsVersion());
+        dto.put("provider", entity.getProvider());
         return dto;
     }
 

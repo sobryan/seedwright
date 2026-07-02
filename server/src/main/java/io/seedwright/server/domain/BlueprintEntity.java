@@ -53,6 +53,9 @@ public class BlueprintEntity {
     @Column(name = "artifacts_version")
     private String artifactsVersion;
 
+    /** Authoring provider: 'heuristic' (default, no LLM) or 'copilot-cli'. */
+    private String provider;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -81,6 +84,8 @@ public class BlueprintEntity {
     public void setArtifactsJson(String artifactsJson) { this.artifactsJson = artifactsJson; }
     public String getArtifactsVersion() { return artifactsVersion; }
     public void setArtifactsVersion(String artifactsVersion) { this.artifactsVersion = artifactsVersion; }
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

@@ -25,7 +25,8 @@ public class BlueprintService {
                                   List<Map<String, Object>> rules,
                                   Map<String, Object> foreignKeys,
                                   Map<String, Object> volumes,
-                                  Long seed) {
+                                  Long seed,
+                                  String provider) {
         try {
             BlueprintEntity entity = new BlueprintEntity();
             entity.setId(UUID.randomUUID().toString());
@@ -33,6 +34,7 @@ public class BlueprintService {
             entity.setDescription(description);
             entity.setStatus("draft");
             entity.setSeed(seed == null ? 42L : seed);
+            entity.setProvider(provider == null || provider.isBlank() ? "heuristic" : provider);
             entity.setSchemaJson(json.writeValueAsString(schema));
             entity.setRulesJson(json.writeValueAsString(rules == null ? List.of() : rules));
             entity.setForeignKeysJson(foreignKeys == null ? null : json.writeValueAsString(foreignKeys));

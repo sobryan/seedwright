@@ -25,9 +25,16 @@ from seedwright_genlib.parquet import write_dataset
 from seedwright_genlib.rng import SeededRng
 from seedwright_pgloader.safesql import validate_relname
 
+from .copilot_provider import CopilotCliProvider
 from .heuristic import HeuristicProvider
 
 LOAD_PLAN_FILENAME = "load_plan.json"
+
+PROVIDERS = ("heuristic", "copilot-cli")
+
+
+class UnknownProviderError(ValueError):
+    """An authoring provider name not in this engine's registry (FR-H.7: fail explicitly)."""
 
 
 def _imported_schema(schema: dict[str, Any]) -> ImportedSchema:
@@ -47,11 +54,24 @@ def run_author(
     volumes: dict[str, int] | None = None,
     seed: int = 42,
     max_iters: int = 4,
+    provider: str = "heuristic",
+    _copilot_runner: Any = None,  # test seam: injected in tests, None in production
 ) -> dict[str, Any]:
-    """Author Generator Artifacts via the evaluator-optimizer loop (heuristic provider)."""
-    provider = HeuristicProvider(foreign_keys=foreign_keys, volumes=volumes, seed=seed)
+    """Author Generator Artifacts via the evaluator-optimizer loop.
+
+    ``provider``: 'heuristic' (deterministic, no LLM — the default) or 'copilot-cli' (the
+    GitHub Copilot CLI as the authoring model; requires an authenticated ``copilot``).
+    """
+    if provider == "heuristic":
+        chosen: Any = HeuristicProvider(foreign_keys=foreign_keys, volumes=volumes, seed=seed)
+    elif provider == "copilot-cli":
+        chosen = CopilotCliProvider(foreign_keys=foreign_keys, volumes=volumes, seed=seed,
+                                    runner=_copilot_runner)
+    else:
+        raise UnknownProviderError(
+            f"unknown authoring provider {provider!r}; available: {list(PROVIDERS)}")
     artifacts = author(
-        _imported_schema(schema), RuleSet.from_dicts(rules), provider, max_iters=max_iters
+        _imported_schema(schema), RuleSet.from_dicts(rules), chosen, max_iters=max_iters
     )
     return artifacts.to_dict()
 

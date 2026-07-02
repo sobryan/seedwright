@@ -12,6 +12,11 @@ spring:
     hibernate:
       ddl-auto: none   # Flyway owns the schema
     open-in-view: false
+  web:
+    resources:
+      # Serve the Next.js static export when present (ui/ built next to server/) — the UI is
+      # reachable at http://localhost:8080/ with no Node process (ADR-0004).
+      static-locations: classpath:/static/,file:../ui/out/
 
 seedwright:
   work-dir: ./data/datasets

@@ -34,7 +34,8 @@ public class McpDataEngine implements DataEngine, AutoCloseable {
                                                List<Map<String, Object>> rules,
                                                Map<String, Object> foreignKeys,
                                                Map<String, Object> volumes,
-                                               long seed) {
+                                               long seed,
+                                               String provider) {
         Map<String, Object> args = new HashMap<>();
         args.put("schema", schema);
         args.put("rules", rules == null ? List.of() : rules);
@@ -45,6 +46,7 @@ public class McpDataEngine implements DataEngine, AutoCloseable {
             args.put("volumes", volumes);
         }
         args.put("seed", seed);
+        args.put("provider", provider == null ? "heuristic" : provider);
         return call("author_generator", args);
     }
 

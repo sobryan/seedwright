@@ -72,6 +72,27 @@ verified), and introspected the target to confirm `customers`/`orders`/`_seedwri
 Integration guide: `docs/integrations/copilot-cli.md` (same endpoint works for Claude Code,
 VS Code, Cursor — it's standard MCP).
 
+## Slice 10 — Copilot CLI as the authoring LLM + one-command quickstart
+
+**`CopilotCliProvider`** (data-engine): the first REAL provider behind the authoring `Provider`
+protocol — shells out to `copilot -p <prompt>` headless. The prompt carries the authoritative
+schema (SQL types + canonical kinds), declared rules, FK topology, volumes, and the frozen
+genspec contract + generator catalog; on refine it feeds Copilot its own failures back. JSON is
+extracted best-effort (fenced → brace-scan → `{}`), and an unparseable reply becomes PARSE_ERROR
+refine feedback rather than a crash — the evaluator-optimizer working as designed (§3A). The
+shop's existing Copilot subscription is the model: **no new API keys**. Provider selection
+(`heuristic` default | `copilot-cli`) threads through the whole stack: data-engine tool → V3
+migration + BlueprintEntity → REST + product-MCP `create_blueprint` → UI select. data-engine
+30/30 (fake-runner tests incl. garbage-then-good refinement), server 9/9.
+
+**Live proof:** `./quickstart.sh` (new: builds data-engine + UI + both jars, starts the stack,
+serves the UI static export from the server at `/`) → blueprint with `provider: copilot-cli` →
+generation job: the data-engine spawned the real `copilot`, which authored a genspec that passed
+validation, the judge, and the determinism gate → dataset ready (100 customers / 249 orders,
+validation passed). Notably the artifact hash matched the heuristic's (`ga_16aee0eeb7…`) —
+Copilot converged on the identical canonical genspec, independently confirming that execution is
+provider-independent (the §3 keystone).
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

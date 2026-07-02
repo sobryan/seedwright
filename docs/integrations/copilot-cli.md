@@ -1,4 +1,21 @@
-# Using seedwright from GitHub Copilot CLI
+# seedwright × GitHub Copilot CLI
+
+Two independent integrations, usable together:
+
+1. **Copilot CLI as an agent driving seedwright** — seedwright is an MCP server; Copilot calls
+   its tools (below).
+2. **Copilot CLI as the authoring LLM** — seedwright's evaluator-optimizer uses `copilot -p`
+   headless as its model. Create Blueprints with `"provider": "copilot-cli"` (UI, REST, or the
+   MCP tool). The shop's existing Copilot subscription is the model: **no new API keys, no new
+   vendor**. The loop validates/judges every proposal against the schema and rules, feeds
+   failures back for refinement, and never accepts a generator that fails its data-tests or the
+   determinism gate — so model quality affects iteration count, never correctness. The default
+   `heuristic` provider needs no LLM at all.
+
+Requirements for (2): an authenticated `copilot` on the central-server host (run
+`copilot` once interactively, or set `GH_TOKEN`).
+
+# Using seedwright from GitHub Copilot CLI (integration 1)
 
 seedwright's central server exposes its full product surface as an **MCP server** at
 `http://<server>:8080/mcp` (Streamable HTTP). GitHub Copilot CLI speaks MCP natively, so a

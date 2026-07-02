@@ -12,7 +12,8 @@ public class FakeDataEngine implements DataEngine {
                                                List<Map<String, Object>> rules,
                                                Map<String, Object> foreignKeys,
                                                Map<String, Object> volumes,
-                                               long seed) {
+                                               long seed,
+                                               String provider) {
         return Map.of(
                 "version", "ga_fake0000",
                 "genspec", Map.of("genspec_version", "1", "seed", seed),
@@ -20,7 +21,7 @@ public class FakeDataEngine implements DataEngine {
                         "kind", "unique", "table", "customers", "column", "id",
                         "params", Map.of())),
                 "provenance", Map.of(
-                        "provider_id", "fake", "iterations", 1,
+                        "provider_id", provider == null ? "fake" : provider, "iterations", 1,
                         "determinism_gate_passed", true, "genlib_version", "0.0.1",
                         "approval_status", "pending_approval"));
     }

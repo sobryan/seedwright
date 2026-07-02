@@ -36,6 +36,20 @@ Blueprint ─▶ authoring loop (model)  ─writes─▶  Generator Artifacts (d
 - **Safety is structural** — synthetic data lands only in an isolated, identifiable namespace; a bare `DROP TABLE`/`DELETE FROM` is never emitted; untrusted imported identifiers are always safely composed.
 - **Model-agnostic** — the model only *chooses* generators; execution is model-free by construction, so swapping providers never changes how data is produced.
 
+## Quick start (on-prem)
+
+```bash
+./quickstart.sh     # builds everything, starts the stack
+# UI  http://localhost:8080/   ·   REST /api   ·   MCP /mcp (Copilot CLI, Claude Code, ...)
+./quickstart.sh stop
+```
+
+No external database required: metadata lives in an embedded H2 file, generation is
+deterministic Python, output is Parquet/CSV/JSONL/SQL files — DB loading (into *your* existing
+database) is optional and confirm-gated. Authoring works with zero API keys (deterministic
+heuristic provider) or with **GitHub Copilot CLI as the authoring LLM**
+(`"provider": "copilot-cli"` — see [`docs/integrations/copilot-cli.md`](docs/integrations/copilot-cli.md)).
+
 ## Development
 
 Each Python sub-project uses [`uv`](https://docs.astral.sh/uv/). See each sub-project's README and `CLAUDE.md` for commands. In short: `cd <sub-project> && uv sync && uv run pytest`.

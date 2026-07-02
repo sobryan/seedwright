@@ -278,7 +278,8 @@ public class JobManager {
                 blueprint.getRulesJson() == null ? List.of() : read(blueprint.getRulesJson(), LIST),
                 blueprint.getForeignKeysJson() == null ? null : read(blueprint.getForeignKeysJson(), MAP),
                 blueprint.getVolumesJson() == null ? null : read(blueprint.getVolumesJson(), MAP),
-                blueprint.getSeed());
+                blueprint.getSeed(),
+                blueprint.getProvider());
         blueprint.setArtifactsJson(write(artifacts));
         blueprint.setArtifactsVersion((String) artifacts.get("version"));
         blueprint.setUpdatedAt(Instant.now());

@@ -59,6 +59,7 @@ export default function Home() {
   const [sink, setSink] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("demo-shop");
+  const [provider, setProvider] = useState("heuristic");
   const [schema, setSchema] = useState(DEMO_SCHEMA);
   const [foreignKeys, setForeignKeys] = useState(DEMO_FKS);
   const [rules, setRules] = useState(DEMO_RULES);
@@ -97,6 +98,7 @@ export default function Home() {
     try {
       await api.createBlueprint({
         name,
+        provider,
         schema: JSON.parse(schema),
         foreignKeys: JSON.parse(foreignKeys),
         rules: JSON.parse(rules),
@@ -202,6 +204,12 @@ export default function Home() {
           <h2>New Blueprint</h2>
           <label>name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} />
+          <label>authoring provider</label>
+          <select value={provider} onChange={(e) => setProvider(e.target.value)}
+                  style={{ padding: "0.45rem", borderRadius: 6, marginBottom: "0.6rem" }}>
+            <option value="heuristic">heuristic — deterministic, no LLM</option>
+            <option value="copilot-cli">copilot-cli — GitHub Copilot authors the generator</option>
+          </select>
           <label>schema (tables → columns + primary_key)</label>
           <textarea rows={10} value={schema} onChange={(e) => setSchema(e.target.value)} />
           <label>foreign keys</label>

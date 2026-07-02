@@ -14,7 +14,8 @@ public interface DataEngine {
                                         List<Map<String, Object>> rules,
                                         Map<String, Object> foreignKeys,
                                         Map<String, Object> volumes,
-                                        long seed);
+                                        long seed,
+                                        String provider);
 
     Map<String, Object> generateDataset(Map<String, Object> artifacts,
                                         Map<String, Object> schema,

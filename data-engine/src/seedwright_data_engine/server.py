@@ -34,10 +34,15 @@ def create_server() -> FastMCP:
         volumes: dict[str, int] | None = None,
         seed: int = 42,
         max_iters: int = 4,
+        provider: str = "heuristic",
     ) -> dict[str, Any]:
-        """Author Generator Artifacts from an imported schema + rules (evaluator-optimizer)."""
+        """Author Generator Artifacts (evaluator-optimizer).
+
+        provider: 'heuristic' (deterministic, no LLM) or 'copilot-cli' (GitHub Copilot CLI
+        as the authoring model — requires an authenticated `copilot` on this host).
+        """
         return run_author(schema=schema, rules=rules or [], foreign_keys=foreign_keys,
-                          volumes=volumes, seed=seed, max_iters=max_iters)
+                          volumes=volumes, seed=seed, max_iters=max_iters, provider=provider)
 
     @mcp.tool()
     def generate_dataset(

@@ -46,14 +46,15 @@ public class BlueprintController {
             List<Map<String, Object>> rules,
             Map<String, Object> foreignKeys,
             Map<String, Object> volumes,
-            Long seed) {}
+            Long seed,
+            String provider) {}
 
     @PostMapping
     public ResponseEntity<Map<String, Object>> create(
             @RequestBody @jakarta.validation.Valid CreateBlueprintRequest request) {
         BlueprintEntity entity = blueprintService.create(
                 request.name(), request.description(), request.schema(), request.rules(),
-                request.foreignKeys(), request.volumes(), request.seed());
+                request.foreignKeys(), request.volumes(), request.seed(), request.provider());
         return ResponseEntity.created(URI.create("/api/blueprints/" + entity.getId())).body(toDto(entity));
     }
 
@@ -109,6 +110,7 @@ public class BlueprintController {
         dto.put("foreignKeys", parse(entity.getForeignKeysJson()));
         dto.put("volumes", parse(entity.getVolumesJson()));
         dto.put("artifactsVersion", entity.getArtifactsVersion());
+        dto.put("provider", entity.getProvider());
         dto.put("createdAt", entity.getCreatedAt());
         dto.put("updatedAt", entity.getUpdatedAt());
         return dto;
