@@ -26,11 +26,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class BlueprintController {
 
     private final BlueprintRepository blueprints;
+    private final io.seedwright.server.domain.BlueprintService blueprintService;
     private final JobManager jobManager;
     private final ObjectMapper json;
 
-    public BlueprintController(BlueprintRepository blueprints, JobManager jobManager, ObjectMapper json) {
+    public BlueprintController(BlueprintRepository blueprints,
+                               io.seedwright.server.domain.BlueprintService blueprintService,
+                               JobManager jobManager, ObjectMapper json) {
         this.blueprints = blueprints;
+        this.blueprintService = blueprintService;
         this.jobManager = jobManager;
         this.json = json;
     }
@@ -46,20 +50,10 @@ public class BlueprintController {
 
     @PostMapping
     public ResponseEntity<Map<String, Object>> create(
-            @RequestBody @jakarta.validation.Valid CreateBlueprintRequest request) throws Exception {
-        BlueprintEntity entity = new BlueprintEntity();
-        entity.setId(UUID.randomUUID().toString());
-        entity.setName(request.name());
-        entity.setDescription(request.description());
-        entity.setStatus("draft");
-        entity.setSeed(request.seed() == null ? 42L : request.seed());
-        entity.setSchemaJson(json.writeValueAsString(request.schema()));
-        entity.setRulesJson(json.writeValueAsString(request.rules() == null ? List.of() : request.rules()));
-        entity.setForeignKeysJson(request.foreignKeys() == null ? null : json.writeValueAsString(request.foreignKeys()));
-        entity.setVolumesJson(request.volumes() == null ? null : json.writeValueAsString(request.volumes()));
-        entity.setCreatedAt(Instant.now());
-        entity.setUpdatedAt(Instant.now());
-        blueprints.save(entity);
+            @RequestBody @jakarta.validation.Valid CreateBlueprintRequest request) {
+        BlueprintEntity entity = blueprintService.create(
+                request.name(), request.description(), request.schema(), request.rules(),
+                request.foreignKeys(), request.volumes(), request.seed());
         return ResponseEntity.created(URI.create("/api/blueprints/" + entity.getId())).body(toDto(entity));
     }
 

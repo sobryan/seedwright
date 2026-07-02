@@ -52,6 +52,26 @@ clean. One real bug found and fixed by the live run: the server handed **relativ
 paths across process boundaries (fine for the stdio child sharing its cwd, broken for the
 separate jdbc-mcp process) — now absolutized at the boundary.
 
+## Slice 9 — agent integration: seedwright as an MCP server (GitHub Copilot CLI first)
+
+The central server now exposes the **product surface as MCP tools at `/mcp`** (Streamable
+HTTP): `list_connections`, `introspect_connection`, `create_blueprint`, `list_blueprints`,
+`generate_dataset` (waits for the job), `get_job`, `list_datasets`, `get_dataset`,
+`export_dataset`, and confirm-gated `materialize_dataset`/`teardown_dataset` (FR-G.4 holds for
+agents: refused without `confirm=true`; tool descriptions instruct the agent to ask its human).
+Blueprint creation extracted to `BlueprintService`, shared by REST and MCP. Tested with a REAL
+MCP client over HTTP (`ProductMcpEndpointTest`, server suite 9/9).
+
+**Live proof with the actual integration target:** installed GitHub Copilot CLI (1.0.68),
+registered seedwright in `~/.copilot/mcp-config.json` (`type: http`, `url:
+http://localhost:8080/mcp`), and drove it headless: Copilot created the `copilot-shop`
+blueprint (FK topology + rules), generated + validated a dataset (50 customers, 114 orders,
+6/6 data-tests), materialized into the `demo` connection with explicit confirmation (164 rows,
+verified), and introspected the target to confirm `customers`/`orders`/`_seedwright` inside the
+`ds_…` schema — the complete product lifecycle from a third-party agent in ~19s.
+Integration guide: `docs/integrations/copilot-cli.md` (same endpoint works for Claude Code,
+VS Code, Cursor — it's standard MCP).
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the
