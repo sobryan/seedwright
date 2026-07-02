@@ -20,9 +20,11 @@ uv.lock.tmp
 /scratch/
 /tmp-data/
 
-# Java / Gradle (future orchestrator sub-project)
+# Java / Maven
 .gradle/
 target/
+# server runtime state (H2 file DB + generated datasets)
+server/data/
 
 # Node (future frontend sub-project)
 node_modules/

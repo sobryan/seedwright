@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: seedwright-server
+  datasource:
+    # H2 in FILE mode: metadata persists across (sudden) restarts. Never in-memory in prod.
+    # DB_CLOSE_ON_EXIT=FALSE: Spring closes the pool itself; avoids double-close on shutdown hooks.
+    url: jdbc:h2:file:./data/seedwright;DB_CLOSE_ON_EXIT=FALSE
+    username: seedwright
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none   # Flyway owns the schema
+    open-in-view: false
+
+seedwright:
+  work-dir: ./data/datasets
+  jobs:
+    max-concurrent: 4
+  data-engine:
+    # How the central server spawns the Python MCP data-engine (stdio transport).
+    command: uv
+    args:
+      - run
+      - --project
+      - ../data-engine
+      - seedwright-data-engine
+    request-timeout: PT30M
