@@ -1,0 +1,19 @@
+server:
+  port: 8081
+  # On-prem: bind to loopback; the central server dials in locally. When deployed as a remote
+  # relay node, change the bind address and put mTLS in front (cloud phase, ADR-0004).
+  address: 127.0.0.1
+
+spring:
+  application:
+    name: seedwright-jdbc-mcp
+
+seedwright:
+  # Named datastore connections — credentials live HERE, on this node (spec §7), and are
+  # referenced by name over MCP. Example:
+  # connections:
+  #   warehouse:
+  #     url: jdbc:postgresql://localhost:5432/warehouse
+  #     username: seedwright_loader
+  #     password: ${WAREHOUSE_PASSWORD}
+  connections: {}
