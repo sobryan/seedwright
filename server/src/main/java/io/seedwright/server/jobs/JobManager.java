@@ -9,6 +9,7 @@ import io.seedwright.server.domain.DatasetRepository;
 import io.seedwright.server.domain.JobEntity;
 import io.seedwright.server.domain.JobRepository;
 import io.seedwright.server.engine.DataEngine;
+import io.seedwright.server.loader.LoaderClient;
 import jakarta.annotation.PreDestroy;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -44,6 +45,7 @@ public class JobManager {
     private final DatasetRepository datasets;
     private final JobRepository jobs;
     private final DataEngine engine;
+    private final LoaderClient loader;
     private final ObjectMapper json;
     private final Path workDir;
     private final Semaphore slots;
@@ -53,6 +55,7 @@ public class JobManager {
                       DatasetRepository datasets,
                       JobRepository jobs,
                       DataEngine engine,
+                      LoaderClient loader,
                       ObjectMapper json,
                       @Value("${seedwright.work-dir:./data/datasets}") String workDir,
                       @Value("${seedwright.jobs.max-concurrent:4}") int maxConcurrent) {
@@ -60,8 +63,11 @@ public class JobManager {
         this.datasets = datasets;
         this.jobs = jobs;
         this.engine = engine;
+        this.loader = loader;
         this.json = json;
-        this.workDir = Path.of(workDir);
+        // absolute: these paths cross process boundaries (data-engine stdio child shares our
+        // cwd, but the jdbc-mcp node is a separate process with its own)
+        this.workDir = Path.of(workDir).toAbsolutePath().normalize();
         this.slots = new Semaphore(maxConcurrent);
     }
 
@@ -157,6 +163,110 @@ public class JobManager {
         } finally {
             slots.release();
         }
+    }
+
+    /** Materialize a ready Dataset into a named DB connection via the jdbc-mcp node (FR-G.2). */
+    public String submitMaterialization(DatasetEntity dataset, String connection, String mode) {
+        JobEntity job = newJob("materialize", dataset.getBlueprintId(), dataset.getId());
+        executor.submit(() -> runMaterialization(job.getId(), dataset.getId(), connection, mode));
+        return job.getId();
+    }
+
+    /** Tear a materialization down from a named connection (scoped, idempotent; FR-G.3). */
+    public String submitTeardown(DatasetEntity dataset, String connection) {
+        JobEntity job = newJob("teardown", dataset.getBlueprintId(), dataset.getId());
+        executor.submit(() -> runTeardown(job.getId(), dataset.getId(), connection));
+        return job.getId();
+    }
+
+    private JobEntity newJob(String type, String blueprintId, String datasetId) {
+        JobEntity job = new JobEntity();
+        job.setId(UUID.randomUUID().toString());
+        job.setType(type);
+        job.setStatus("pending");
+        job.setBlueprintId(blueprintId);
+        job.setDatasetId(datasetId);
+        job.setCreatedAt(Instant.now());
+        jobs.save(job);
+        return job;
+    }
+
+    private void runMaterialization(String jobId, String datasetId, String connection, String mode) {
+        try {
+            slots.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        try {
+            DatasetEntity dataset = datasets.findById(datasetId).orElseThrow();
+            Map<String, Object> loadPlan = read(dataset.getLoadPlanJson(), MAP);
+
+            transition(jobId, "running", "exporting jsonl");
+            String exportDir = dataset.getCanonicalDir() + "/exports";
+            engine.exportDataset(dataset.getCanonicalDir(), loadPlan, exportDir, List.of("jsonl"));
+
+            transition(jobId, "running", "loading via jdbc-mcp: " + connection);
+            Map<String, Object> load = loader.loadDataset(
+                    connection, exportDir, loadPlan, dataset.getNamespace(), mode);
+
+            transition(jobId, "running", "verifying materialization");
+            Map<String, Object> verification =
+                    loader.verifyMaterialization(connection, loadPlan, dataset.getNamespace());
+            boolean ok = Boolean.TRUE.equals(verification.get("ok"));
+
+            recordMaterialization(datasetId, Map.of(
+                    "connection", connection,
+                    "namespace", dataset.getNamespace(),
+                    "mode", mode,
+                    "status", ok ? "loaded" : "verification_failed",
+                    "total_rows", load.getOrDefault("total_rows", -1),
+                    "verified", ok,
+                    "at", Instant.now().toString()));
+            finish(jobId, ok ? "succeeded" : "failed",
+                    ok ? "materialized to " + connection : "verification failed", null);
+        } catch (Exception e) {
+            log.error("materialization job {} failed", jobId, e);
+            finish(jobId, "failed", "materialization failed", e.toString());
+        } finally {
+            slots.release();
+        }
+    }
+
+    private void runTeardown(String jobId, String datasetId, String connection) {
+        try {
+            slots.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        try {
+            DatasetEntity dataset = datasets.findById(datasetId).orElseThrow();
+            transition(jobId, "running", "tearing down via jdbc-mcp: " + connection);
+            Map<String, Object> result = loader.teardownDataset(connection, dataset.getNamespace());
+            recordMaterialization(datasetId, Map.of(
+                    "connection", connection,
+                    "namespace", dataset.getNamespace(),
+                    "status", "torn_down",
+                    "existed", result.getOrDefault("existed", false),
+                    "at", Instant.now().toString()));
+            finish(jobId, "succeeded", "teardown complete on " + connection, null);
+        } catch (Exception e) {
+            log.error("teardown job {} failed", jobId, e);
+            finish(jobId, "failed", "teardown failed", e.toString());
+        } finally {
+            slots.release();
+        }
+    }
+
+    private void recordMaterialization(String datasetId, Map<String, Object> record) {
+        updateDataset(datasetId, ds -> {
+            List<Map<String, Object>> records = ds.getMaterializationsJson() == null
+                    ? new java.util.ArrayList<>()
+                    : new java.util.ArrayList<>(read(ds.getMaterializationsJson(), LIST));
+            records.add(record);
+            ds.setMaterializationsJson(write(records));
+        });
     }
 
     private Map<String, Object> ensureArtifacts(BlueprintEntity blueprint) {

@@ -33,6 +33,11 @@ public class ConnectionRegistry {
         this.properties = properties;
     }
 
+    /** Connection NAMES only — never URLs or credentials (those stay on this node). */
+    public java.util.List<String> names() {
+        return properties.connections().keySet().stream().sorted().toList();
+    }
+
     public Connection open(String name) throws SQLException {
         ConnectionsProperties.Entry entry = properties.connections().get(name);
         if (entry == null) {

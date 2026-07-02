@@ -50,6 +50,10 @@ public class DatasetEntity {
     @Column(name = "validation_report_json")
     private String validationReportJson;
 
+    @Lob
+    @Column(name = "materializations_json")
+    private String materializationsJson;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -75,6 +79,8 @@ public class DatasetEntity {
     public void setLoadPlanJson(String loadPlanJson) { this.loadPlanJson = loadPlanJson; }
     public String getValidationReportJson() { return validationReportJson; }
     public void setValidationReportJson(String validationReportJson) { this.validationReportJson = validationReportJson; }
+    public String getMaterializationsJson() { return materializationsJson; }
+    public void setMaterializationsJson(String materializationsJson) { this.materializationsJson = materializationsJson; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

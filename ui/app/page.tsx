@@ -55,6 +55,8 @@ const DEMO_RULES = JSON.stringify(
 export default function Home() {
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [datasets, setDatasets] = useState<Record<string, Dataset[]>>({});
+  const [connections, setConnections] = useState<string[]>([]);
+  const [sink, setSink] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("demo-shop");
   const [schema, setSchema] = useState(DEMO_SCHEMA);
@@ -81,6 +83,13 @@ export default function Home() {
 
   useEffect(() => {
     void refresh();
+    api
+      .listConnections()
+      .then((r) => {
+        setConnections(r.connections);
+        if (r.connections.length > 0) setSink(r.connections[0]);
+      })
+      .catch(() => setConnections([])); // jdbc-mcp not running -> file export only
   }, [refresh]);
 
   async function createBlueprint() {
@@ -138,6 +147,34 @@ export default function Home() {
     try {
       const result = await api.exportDataset(datasetId, ["csv", "jsonl", "sql"]);
       alert("Exported:\n" + JSON.stringify(result.files, null, 2));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function materialize(datasetId: string) {
+    if (!sink) return;
+    // FR-G.4: writing to a database is side-effecting — explicit user confirmation
+    if (!confirm(`Load this dataset into database connection "${sink}"?`)) return;
+    setBusy(datasetId);
+    try {
+      const { jobId } = await api.materialize(datasetId, sink);
+      pollJob(jobId);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function teardown(datasetId: string, connection: string) {
+    if (!confirm(`Tear this dataset down from "${connection}"? (deletes its ds_ schema)`)) return;
+    setBusy(datasetId);
+    try {
+      const { jobId } = await api.teardown(datasetId, connection);
+      pollJob(jobId);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -210,16 +247,46 @@ export default function Home() {
                 )}
               </div>
               {ds.status === "ready" && (
-                <button
-                  className="secondary"
-                  onClick={() => exportFiles(ds.id)}
-                  disabled={busy === ds.id}
-                >
-                  export csv/jsonl/sql
-                </button>
+                <span className="row">
+                  {connections.length > 0 && (
+                    <>
+                      <select value={sink} onChange={(e) => setSink(e.target.value)}
+                              style={{ padding: "0.4rem", borderRadius: 6 }}>
+                        {connections.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <button onClick={() => materialize(ds.id)} disabled={busy === ds.id}>
+                        load to db
+                      </button>
+                    </>
+                  )}
+                  <button
+                    className="secondary"
+                    onClick={() => exportFiles(ds.id)}
+                    disabled={busy === ds.id}
+                  >
+                    export files
+                  </button>
+                </span>
               )}
             </div>
           ))}
+          {(datasets[bp.id] ?? []).flatMap((ds) =>
+            (ds.materializations ?? []).map((m, i) => (
+              <div className="row spread" key={ds.id + i} style={{ marginTop: "0.4rem" }}>
+                <div className="muted">
+                  ↳ <span className={`badge ${m.status === "loaded" ? "ready" : ""}`}>{m.status}</span>{" "}
+                  {m.connection} <code>{m.namespace}</code>
+                </div>
+                {m.status === "loaded" && (
+                  <button className="secondary" onClick={() => teardown(ds.id, m.connection)}>
+                    teardown
+                  </button>
+                )}
+              </div>
+            )),
+          )}
         </div>
       ))}
     </>

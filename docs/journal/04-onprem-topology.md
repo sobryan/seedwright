@@ -35,6 +35,23 @@ server** (Streamable HTTP) + **Next.js UI** (static export).
 passing command-line args (highest precedence) to `.run(...)`. Lesson recorded: builder
 `.properties()` ≠ overrides.
 
+## Slice 8 — the DB-sink path (added after slices 4–7, proven live)
+
+The central server now commands the jdbc-mcp node over **live Streamable HTTP MCP**
+(`HttpClientStreamableHttpTransport`): `GET /api/connections` (names only — credentials stay on
+the node), `POST /api/connections/{name}/introspect` (feeds Blueprint creation), and gated
+`POST /api/datasets/{id}/materialize|teardown` (FR-G.4: `confirm:true` required, 400 without).
+Materialize job = export JSONL via the data-engine → `load_dataset` on the node → verify →
+per-sink record on the Dataset. UI grew a connection picker + load/teardown controls.
+
+**Live three-process proof:** central server + data-engine (stdio MCP) + jdbc-mcp (HTTP MCP)
+with a `demo` H2 target ("their DB"): unconfirmed request refused (400) → confirmed
+materialize succeeded (**349 rows, verified**) → introspection of the target showed
+`customers`/`orders` + the `_seedwright` marker inside the `ds_…` schema → teardown → target
+clean. One real bug found and fixed by the live run: the server handed **relative** work-dir
+paths across process boundaries (fine for the stdio child sharing its cwd, broken for the
+separate jdbc-mcp process) — now absolutized at the boundary.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

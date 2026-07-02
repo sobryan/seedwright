@@ -34,6 +34,14 @@ export interface Job {
   datasetId?: string;
 }
 
+export interface Materialization {
+  connection: string;
+  namespace: string;
+  status: string;
+  verified?: boolean;
+  at: string;
+}
+
 export interface Dataset {
   id: string;
   blueprintId: string;
@@ -41,6 +49,7 @@ export interface Dataset {
   namespace: string;
   rowCounts?: Record<string, number>;
   validationReport?: { passed: boolean; failures: unknown[] };
+  materializations?: Materialization[];
 }
 
 export const api = {
@@ -60,5 +69,18 @@ export const api = {
     request<{ files: Record<string, string[]> }>(`/api/datasets/${id}/export`, {
       method: "POST",
       body: JSON.stringify({ formats }),
+    }),
+  listConnections: () =>
+    request<{ connections: string[] }>("/api/connections"),
+  materialize: (id: string, connection: string) =>
+    request<{ jobId: string }>(`/api/datasets/${id}/materialize`, {
+      method: "POST",
+      // confirm:true is the explicit FR-G.4 gate — the UI asks the user first
+      body: JSON.stringify({ connection, mode: "replace", confirm: true }),
+    }),
+  teardown: (id: string, connection: string) =>
+    request<{ jobId: string }>(`/api/datasets/${id}/teardown`, {
+      method: "POST",
+      body: JSON.stringify({ connection, confirm: true }),
     }),
 };

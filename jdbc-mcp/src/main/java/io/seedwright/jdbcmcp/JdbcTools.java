@@ -31,6 +31,10 @@ public class JdbcTools {
 
     public List<SyncToolSpecification> specifications() {
         return List.of(
+                spec("list_connections",
+                        "List the datastore connection NAMES configured on this node (no secrets)",
+                        Map.of("type", "object", "properties", Map.of()),
+                        args -> Map.of("connections", connections.names())),
                 spec("introspect_schema",
                         "Introspect tables/columns/PKs/FKs of a named connection's schema",
                         Map.of("type", "object",
