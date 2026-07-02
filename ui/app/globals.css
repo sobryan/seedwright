@@ -1,0 +1,93 @@
+:root {
+  --bg: #0f1420;
+  --panel: #1a2130;
+  --border: #2c3648;
+  --text: #e6eaf2;
+  --muted: #8a94a8;
+  --accent: #5b8def;
+  --ok: #3fb27f;
+  --warn: #d9a03f;
+  --fail: #d95f5f;
+  font-size: 15px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo { font-weight: 700; letter-spacing: 0.02em; }
+.tagline { color: var(--muted); font-size: 0.85rem; }
+
+main { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+h1 { font-size: 1.2rem; margin: 0 0 1rem; }
+h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+
+button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+
+input, textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.82rem;
+  margin-bottom: 0.6rem;
+}
+
+label { display: block; color: var(--muted); font-size: 0.8rem; margin-bottom: 0.25rem; }
+
+.row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.badge.ready, .badge.succeeded { color: var(--ok); border-color: var(--ok); }
+.badge.failed, .badge.quarantined { color: var(--fail); border-color: var(--fail); }
+.badge.running, .badge.generating, .badge.validating, .badge.pending {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.muted { color: var(--muted); font-size: 0.82rem; }
+.error { color: var(--fail); font-size: 0.85rem; white-space: pre-wrap; }
+code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.82rem; }

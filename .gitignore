@@ -26,8 +26,12 @@ target/
 # server runtime state (H2 file DB + generated datasets)
 server/data/
 
-# Node (future frontend sub-project)
+# Node / Next.js
 node_modules/
+ui/.next/
+ui/out/
+ui/next-env.d.ts
+ui/tsconfig.tsbuildinfo
 
 # OS / editor
 .DS_Store

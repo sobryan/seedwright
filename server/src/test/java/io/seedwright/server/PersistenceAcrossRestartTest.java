@@ -23,15 +23,16 @@ class PersistenceAcrossRestartTest {
     Path tempDir;
 
     private ConfigurableApplicationContext boot(Path dbDir) {
+        // NB: pass as command-line args, not .properties() — builder properties are DEFAULTS
+        // that application.yml overrides, which would silently point the test at ./data.
         return new SpringApplicationBuilder(SeedwrightServerApplication.class)
-                .properties(
-                        "spring.datasource.url=jdbc:h2:file:" + dbDir.resolve("seedwright")
-                                + ";DB_CLOSE_ON_EXIT=FALSE",
-                        "server.port=0",
-                        "seedwright.work-dir=" + dbDir.resolve("work"))
                 .initializers(ctx -> ctx.getBeanFactory()
                         .registerSingleton("dataEngine", (DataEngine) new FakeDataEngine()))
-                .run();
+                .run(
+                        "--spring.datasource.url=jdbc:h2:file:" + dbDir.resolve("seedwright")
+                                + ";DB_CLOSE_ON_EXIT=FALSE",
+                        "--server.port=0",
+                        "--seedwright.work-dir=" + dbDir.resolve("work"));
     }
 
     @Test

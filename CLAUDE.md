@@ -88,20 +88,20 @@ This is a polyglot monorepo built bottom-up (see `docs/decisions/0001-*` and `do
 - **`generation-library/`** (sub-project A, Python) — **built, Slice 1 complete** (92 tests green). The deterministic substrate: seeded RNG, canonical types, generators, single-table + cross-table FK generation, Parquet writer, Load-Plan emitter, determinism gate.
 - **`postgres-loader/`** (sub-project C, Python) — **built, Slice 2 complete** (101 tests + 5 skippable integration; see `docs/decisions/0002-*`). Consumes canonical Parquet + Load-Plan JSON (no genlib dep). Pure offline layer: `safesql` (namespace/identifier injection guard), `pgtypes`, `plan`, `ddl` (NOT-NULL-only), `copy` (COPY text encoder), `typecheck` (plan/Parquet type-agreement), `results`. Integration `executor` (psycopg): scoped load/teardown, marker-guarded drop, one txn with `search_path=''`+UTC.
 - **`authoring/`** (sub-project B, Python) — **built, Slice 3 complete** (62 tests; see `docs/decisions/0003-*`). The model-agnostic evaluator-optimizer. Path-depends on genlib. Model emits a declarative genspec (JSON) → `validate` → `compile` into genlib `SchemaSpec` → sample → `judge` (data-tests from declared rules) → refine → determinism gate → `GeneratorArtifacts` (PENDING_APPROVAL). Offline via a scripted mock provider; real LLM adapters slot in behind the `provider` protocol.
-- Not yet built: real provider adapters, end-to-end CLI, validation suite service, Spring orchestrator (D), React UI (E).
+- **`data-engine/`** (Python 3.12) — **built, Slice 4** (21 tests). The Python MCP server (stdio, FastMCP): tools `author_generator` (heuristic no-LLM provider by default), `generate_dataset`, `validate_dataset`, `export_dataset` (canonical→CSV/JSONL/SQL), `load_postgres`/`teardown_postgres`. Tool logic in plain tested functions; MCP layer is a shim.
+- **`server/`** (Java 21, Spring Boot 3.5, Maven) — **built, Slice 5** (4 tests incl. a LIVE Java↔Python stdio MCP test and an H2 restart-persistence test). The central application (ADR-0004): REST + async jobs + **H2 file-mode metadata** (`./data/seedwright`) + MCP client that spawns the data-engine.
+- **`jdbc-mcp/`** (Java 21, Spring Boot, Maven) — **built, Slice 6** (26 tests vs real H2). MCP server over Streamable HTTP (`/mcp`, port 8081): `introspect_schema`, `load_dataset` (JSONL+plan → DDL + batched inserts, one txn, row-count verify), `teardown_dataset` (marker-guarded), `verify_materialization`. Credentials are node-local named connections (spec §7). Same artifact becomes the remote relay node later.
+- **`ui/`** (Next.js, static export) — **built, Slice 7**. Blueprint create/generate/watch/export; `npm run build` → `out/` served by the central server in production.
+- Not yet built: real LLM provider adapters, validation-suite service beyond data-tests, central-server↔jdbc-mcp wiring for DB sinks, relay-node security hardening (cloud phase).
 
-Each Python sub-project uses `uv` (`cd <dir>` first). **generation-library** + **authoring** are Python 3.12+ (resolve to 3.14); **postgres-loader** is pinned to 3.12 (psycopg wheels). The two-phase keystone is now proven end-to-end: **authoring** (B) writes artifacts → genlib (A) executes them deterministically → **loader** (C) materializes to Postgres.
+Commands (`cd <dir>` first). Python sub-projects use `uv`; **postgres-loader** and **data-engine** are pinned to Python 3.12:
 
 ```bash
-uv sync                     # create venv + install deps (first time)
-uv run pytest               # full regression suite — run on EVERY change
-uv run pytest -m "not slow" # fast loop (generation-library)
-uv run pytest -m slow       # ~1M-row scale test (generation-library)
-uv run ruff check .         # lint (must be clean)
-uv run mypy                 # type-check src (strict; must be clean)
-
-# postgres-loader integration tests (need a live Postgres; auto-skip otherwise):
-SEEDWRIGHT_TEST_PG_DSN=postgresql://user:pass@localhost/db uv run pytest -m integration
+uv sync && uv run pytest    # every Python sub-project; run the FULL suite on every change
+uv run ruff check . && uv run mypy   # lint + strict types (must be clean)
+mvn test                    # server/ and jdbc-mcp/ (Java 21 + Maven)
+npm run build               # ui/ (static export to out/)
+SEEDWRIGHT_TEST_PG_DSN=postgresql://user:pass@localhost/db uv run pytest -m integration  # pgloader live tests
 ```
 
 **Regression discipline (per user directive):** every feature is TDD'd (RED→GREEN→REFACTOR) and the **entire** suite is run before a feature is considered done. The suite *is* the regression corpus. Keep it green; keep it fast.
