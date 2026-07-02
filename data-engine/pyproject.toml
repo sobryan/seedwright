@@ -1,0 +1,54 @@
+[project]
+name = "seedwright-data-engine"
+version = "0.0.1"
+description = "seedwright data engine — the Python MCP server exposing authoring, deterministic generation, validation, file export, and Postgres load/teardown as MCP tools (ADR-0004)."
+readme = "README.md"
+# Pinned to 3.12: seedwright-pgloader requires >=3.12,<3.13 (psycopg wheels).
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mcp>=1.2",
+    "seedwright-genlib",
+    "seedwright-authoring",
+    "seedwright-pgloader",
+    "pyarrow>=16",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[tool.uv.sources]
+seedwright-genlib = { path = "../generation-library", editable = true }
+seedwright-authoring = { path = "../authoring", editable = true }
+seedwright-pgloader = { path = "../postgres-loader", editable = true }
+
+[project.scripts]
+seedwright-data-engine = "seedwright_data_engine.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/seedwright_data_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
