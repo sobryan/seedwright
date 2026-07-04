@@ -83,4 +83,45 @@ class ServerFlowTest {
                 rest.postForEntity("/api/blueprints/nope/datasets", Map.of(), Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    @Test
+    void previewReturnsSampleRowsWithoutMaterializing() {
+        Map<String, Object> create = Map.of(
+                "name", "preview-shop",
+                "schema", Map.of("customers", Map.of(
+                        "columns", List.of(Map.of("name", "id", "sql_type", "bigint")),
+                        "primary_key", List.of("id"))),
+                "seed", 42);
+        String blueprintId = (String) rest.postForEntity("/api/blueprints", create, Map.class)
+                .getBody().get("id");
+
+        Map<?, ?> preview = rest.postForObject(
+                "/api/blueprints/" + blueprintId + "/preview?rows=5", Map.of(), Map.class);
+        assertThat(preview.get("sampled")).isEqualTo(true);
+        assertThat(((Map<?, ?>) preview.get("tables")).get("customers")).isNotNull();
+    }
+
+    @Test
+    void rowsEndpointPagesThroughDataset() {
+        Map<String, Object> create = Map.of(
+                "name", "rows-shop",
+                "schema", Map.of("customers", Map.of(
+                        "columns", List.of(Map.of("name", "id", "sql_type", "bigint")),
+                        "primary_key", List.of("id"))),
+                "seed", 42);
+        String blueprintId = (String) rest.postForEntity("/api/blueprints", create, Map.class)
+                .getBody().get("id");
+        Map<?, ?> accepted = rest.postForEntity(
+                "/api/blueprints/" + blueprintId + "/datasets", Map.of(), Map.class).getBody();
+        String jobId = (String) accepted.get("jobId");
+        String datasetId = (String) accepted.get("datasetId");
+        Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                assertThat(rest.getForObject("/api/jobs/" + jobId, Map.class).get("status"))
+                        .isEqualTo("succeeded"));
+
+        Map<?, ?> page = rest.getForObject(
+                "/api/datasets/" + datasetId + "/rows?table=customers&offset=5&limit=10", Map.class);
+        assertThat(page.get("total_rows")).isEqualTo(40);
+        assertThat((List<?>) page.get("rows")).isNotEmpty();
+    }
 }

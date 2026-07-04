@@ -84,6 +84,21 @@ public class McpDataEngine implements DataEngine, AutoCloseable {
                 "formats", formats));
     }
 
+    @Override
+    public Map<String, Object> previewDataset(Map<String, Object> artifacts,
+                                              Map<String, Object> schema,
+                                              int rowsPerTable) {
+        return call("preview_dataset", Map.of(
+                "artifacts", artifacts, "schema", schema, "rows_per_table", rowsPerTable));
+    }
+
+    @Override
+    public Map<String, Object> readRows(String canonicalDir, String table, int offset, int limit) {
+        return call("read_rows", Map.of(
+                "canonical_dir", canonicalDir, "table", table,
+                "offset", offset, "limit", limit));
+    }
+
     @SuppressWarnings("unchecked")
     private synchronized Map<String, Object> call(String tool, Map<String, Object> args) {
         CallToolResult result = ensureClient().callTool(new CallToolRequest(tool, args));

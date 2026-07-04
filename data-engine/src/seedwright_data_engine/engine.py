@@ -129,6 +129,71 @@ def run_validate(
     }
 
 
+def _json_safe(value: Any) -> Any:
+    """Render a canonical value JSON-safe with fidelity: decimals exact strings, temporals ISO."""
+    from decimal import Decimal
+
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, bytes):
+        return value.hex()
+    if hasattr(value, "isoformat"):
+        return str(value.isoformat())
+    return value
+
+
+def _json_safe_rows(table: Any) -> list[dict[str, Any]]:
+    return [{k: _json_safe(v) for k, v in row.items()} for row in table.to_pylist()]
+
+
+def run_preview(
+    *,
+    artifacts: dict[str, Any],
+    schema: dict[str, Any],
+    rows_per_table: int = 10,
+) -> dict[str, Any]:
+    """Preview / dry-run (FR-E.6): a small in-memory sample from Generator Artifacts.
+
+    No files, no full materialization — fast feedback while authoring/refining. Reuses the
+    authoring loop's sample path so what you preview is what the judge judged.
+    """
+    from seedwright_authoring.datatests import generate_sample
+
+    genspec = parse_genspec(artifacts["genspec"])
+    compiled = compile_to_genlib(genspec, _imported_schema(schema))
+    sample = generate_sample(compiled, genspec.seed, sample_rows=max(rows_per_table, 1))
+    return {
+        "sampled": True,
+        "seed": genspec.seed,
+        "tables": {
+            name: _json_safe_rows(table.slice(0, rows_per_table))
+            for name, table in sample.items()
+        },
+    }
+
+
+def run_read_rows(
+    *,
+    canonical_dir: str,
+    table: str,
+    offset: int = 0,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Paginated read of a generated Dataset's canonical Parquet (FR-G.1)."""
+    safe_limit = max(1, min(int(limit), 1000))
+    safe_offset = max(0, int(offset))
+    path = Path(canonical_dir) / f"{validate_relname(table)}.parquet"
+    arrow = pq.read_table(path)  # type: ignore[no-untyped-call]
+    page = arrow.slice(safe_offset, safe_limit)
+    return {
+        "table": table,
+        "offset": safe_offset,
+        "limit": safe_limit,
+        "total_rows": arrow.num_rows,
+        "rows": _json_safe_rows(page),
+    }
+
+
 def run_load_postgres(
     *,
     canonical_dir: str,

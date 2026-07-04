@@ -13,6 +13,8 @@ EXPECTED_TOOLS = {
     "author_generator",
     "generate_dataset",
     "validate_dataset",
+    "preview_dataset",
+    "read_rows",
     "export_dataset",
     "load_postgres",
     "teardown_postgres",

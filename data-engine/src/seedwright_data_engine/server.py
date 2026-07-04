@@ -15,6 +15,8 @@ from .engine import (
     run_author,
     run_generate,
     run_load_postgres,
+    run_preview,
+    run_read_rows,
     run_teardown_postgres,
     run_validate,
 )
@@ -51,6 +53,20 @@ def create_server() -> FastMCP:
         """Execute Generator Artifacts deterministically -> canonical Parquet + Load Plan."""
         return run_generate(artifacts=artifacts, schema=schema, out_dir=out_dir,
                             namespace=namespace)
+
+    @mcp.tool()
+    def preview_dataset(
+        artifacts: dict[str, Any], schema: dict[str, Any], rows_per_table: int = 10
+    ) -> dict[str, Any]:
+        """Preview a small in-memory sample from Generator Artifacts (dry-run, no files)."""
+        return run_preview(artifacts=artifacts, schema=schema, rows_per_table=rows_per_table)
+
+    @mcp.tool()
+    def read_rows(
+        canonical_dir: str, table: str, offset: int = 0, limit: int = 100
+    ) -> dict[str, Any]:
+        """Read a page of rows from a generated Dataset's canonical Parquet."""
+        return run_read_rows(canonical_dir=canonical_dir, table=table, offset=offset, limit=limit)
 
     @mcp.tool()
     def validate_dataset(

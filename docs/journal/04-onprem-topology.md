@@ -117,6 +117,25 @@ at test time (a class genuinely absent from the classpath — the parent-first c
 made the "copy the H2 jar" version of that test a false test, caught and replaced). jdbc-mcp
 35/35; README documents the dialect matrix + DB2 recipe.
 
+## Slice 12 — preview, row browsing, introspect→Blueprint (the UI becomes a product)
+
+**Preview / dry-run (FR-E.6):** `preview_dataset` in the data-engine reuses the authoring
+loop's sample path (what you preview is what the judge judged) — a small in-memory sample,
+no files, JSON-safe rows (decimals exact strings, temporals ISO). Surfaced as
+`POST /api/blueprints/{id}/preview`, the product-MCP tool `preview_blueprint`, and a UI
+button rendering per-table sample grids.
+
+**Row browsing (FR-G.1):** `read_rows` pages the canonical Parquet (clamped offset/limit,
+path-safe table names) → `GET /api/datasets/{id}/rows`, MCP `read_dataset_rows`, and a UI
+browser with prev/next (click a table's row-count chip on any dataset).
+
+**Introspect→Blueprint in the UI:** pick a connection, one click introspects their database
+through jdbc-mcp and prefills the Blueprint form's schema + foreign keys — "point seedwright
+at your DB" is now a UI flow, not just an agent flow.
+
+Live-verified end-to-end with the temporal demo schema: instant preview (dates + tz-aware
+timestamps), then paging through 249 generated orders. data-engine 36, server 11.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

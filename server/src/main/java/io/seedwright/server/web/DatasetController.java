@@ -47,6 +47,25 @@ public class DatasetController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    /** Paginated row browsing over the canonical Parquet (FR-G.1). */
+    @GetMapping("/datasets/{id}/rows")
+    public ResponseEntity<Map<String, Object>> rows(
+            @PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestParam String table,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int offset,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "50") int limit) {
+        DatasetEntity dataset = datasets.findById(id).orElse(null);
+        if (dataset == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (dataset.getCanonicalDir() == null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "dataset has no canonical data yet",
+                                 "status", dataset.getStatus()));
+        }
+        return ResponseEntity.ok(engine.readRows(dataset.getCanonicalDir(), table, offset, limit));
+    }
+
     public record ExportRequest(List<String> formats) {}
 
     /** Export the canonical dataset to files (the always-available sink, FR-G.4). */

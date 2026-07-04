@@ -79,6 +79,17 @@ public class BlueprintController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Preview / dry-run (FR-E.6): a small sample without materializing anything. */
+    @PostMapping("/{id}/preview")
+    public ResponseEntity<Map<String, Object>> preview(
+            @PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "10") int rows) {
+        return blueprints.findById(id)
+                .map(blueprint -> ResponseEntity.ok(
+                        jobManager.preview(blueprint, Math.max(1, Math.min(rows, 50)))))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     public record TriggerGenerationRequest(String datasetName) {}
 
     /** Trigger generation (FR-I.2): 202 Accepted + a Job to poll. */

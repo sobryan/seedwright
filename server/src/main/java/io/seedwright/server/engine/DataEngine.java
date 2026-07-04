@@ -30,4 +30,10 @@ public interface DataEngine {
                                       Map<String, Object> loadPlan,
                                       String outDir,
                                       List<String> formats);
+
+    Map<String, Object> previewDataset(Map<String, Object> artifacts,
+                                       Map<String, Object> schema,
+                                       int rowsPerTable);
+
+    Map<String, Object> readRows(String canonicalDir, String table, int offset, int limit);
 }

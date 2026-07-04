@@ -47,6 +47,23 @@ public class FakeDataEngine implements DataEngine {
     }
 
     @Override
+    public Map<String, Object> previewDataset(Map<String, Object> artifacts,
+                                              Map<String, Object> schema,
+                                              int rowsPerTable) {
+        return Map.of("sampled", true, "seed", 42,
+                "tables", Map.of("customers", List.of(
+                        Map.of("id", 1, "balance", "0.10"),
+                        Map.of("id", 2, "balance", "9.99"))));
+    }
+
+    @Override
+    public Map<String, Object> readRows(String canonicalDir, String table, int offset, int limit) {
+        return Map.of("table", table, "offset", offset, "limit", limit,
+                "total_rows", 40,
+                "rows", List.of(Map.of("id", offset + 1, "balance", "1.00")));
+    }
+
+    @Override
     public Map<String, Object> exportDataset(String canonicalDir,
                                              Map<String, Object> loadPlan,
                                              String outDir,

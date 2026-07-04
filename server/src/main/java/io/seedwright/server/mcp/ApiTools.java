@@ -106,6 +106,46 @@ public class ApiTools {
                                 "required", List.of("name", "schema")),
                         this::createBlueprint),
 
+                spec("preview_blueprint",
+                        "Preview a small sample of what a Blueprint would generate (dry-run, "
+                                + "no files, no database). Authors the generator first if needed.",
+                        Map.of("type", "object",
+                                "properties", Map.of(
+                                        "blueprint_id", Map.of("type", "string"),
+                                        "rows_per_table", Map.of("type", "integer")),
+                                "required", List.of("blueprint_id")),
+                        args -> {
+                            BlueprintEntity blueprint = blueprints
+                                    .findById((String) args.get("blueprint_id"))
+                                    .orElseThrow(() -> new IllegalArgumentException("no such blueprint"));
+                            int rows = args.get("rows_per_table") instanceof Number n
+                                    ? n.intValue() : 10;
+                            return jobManager.preview(blueprint, Math.max(1, Math.min(rows, 50)));
+                        }),
+
+                spec("read_dataset_rows",
+                        "Read a page of rows from a generated Dataset's canonical data",
+                        Map.of("type", "object",
+                                "properties", Map.of(
+                                        "dataset_id", Map.of("type", "string"),
+                                        "table", Map.of("type", "string"),
+                                        "offset", Map.of("type", "integer"),
+                                        "limit", Map.of("type", "integer")),
+                                "required", List.of("dataset_id", "table")),
+                        args -> {
+                            DatasetEntity dataset = datasets
+                                    .findById((String) args.get("dataset_id"))
+                                    .orElseThrow(() -> new IllegalArgumentException("no such dataset"));
+                            if (dataset.getCanonicalDir() == null) {
+                                throw new IllegalStateException("dataset has no canonical data yet");
+                            }
+                            return engine.readRows(
+                                    dataset.getCanonicalDir(),
+                                    (String) args.get("table"),
+                                    args.get("offset") instanceof Number o ? o.intValue() : 0,
+                                    args.get("limit") instanceof Number l ? l.intValue() : 50);
+                        }),
+
                 spec("generate_dataset",
                         "Generate a Dataset from a Blueprint (authoring + deterministic "
                                 + "generation + validation). Waits up to wait_seconds (default 120) "

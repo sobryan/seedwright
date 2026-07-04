@@ -72,6 +72,20 @@ export const api = {
     }),
   listConnections: () =>
     request<{ connections: string[] }>("/api/connections"),
+  introspect: (connection: string) =>
+    request<{ schema: Record<string, unknown>; foreign_keys: Record<string, unknown> }>(
+      `/api/connections/${connection}/introspect`,
+      { method: "POST" },
+    ),
+  preview: (blueprintId: string, rows = 5) =>
+    request<{ sampled: boolean; tables: Record<string, Record<string, unknown>[]> }>(
+      `/api/blueprints/${blueprintId}/preview?rows=${rows}`,
+      { method: "POST", body: "{}" },
+    ),
+  readRows: (datasetId: string, table: string, offset: number, limit: number) =>
+    request<{ total_rows: number; rows: Record<string, unknown>[] }>(
+      `/api/datasets/${datasetId}/rows?table=${encodeURIComponent(table)}&offset=${offset}&limit=${limit}`,
+    ),
   materialize: (id: string, connection: string) =>
     request<{ jobId: string }>(`/api/datasets/${id}/materialize`, {
       method: "POST",

@@ -67,6 +67,14 @@ export default function Home() {
   const [rules, setRules] = useState(DEMO_RULES);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<Record<string, Record<string, Record<string, unknown>[]>>>({});
+  const [browser, setBrowser] = useState<{
+    datasetId: string;
+    table: string;
+    offset: number;
+    total: number;
+    rows: Record<string, unknown>[];
+  } | null>(null);
   const pollers = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
@@ -158,6 +166,45 @@ export default function Home() {
     }
   }
 
+  async function introspectInto() {
+    if (!sink) return;
+    setBusy("introspect");
+    try {
+      const result = await api.introspect(sink);
+      setSchema(JSON.stringify(result.schema, null, 2));
+      setForeignKeys(JSON.stringify(result.foreign_keys ?? {}, null, 2));
+      setName(`${sink}-blueprint`);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function previewBlueprint(blueprintId: string) {
+    setBusy(blueprintId);
+    try {
+      const result = await api.preview(blueprintId, 5);
+      setPreviews((p) => ({ ...p, [blueprintId]: result.tables }));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function browse(datasetId: string, table: string, offset = 0) {
+    setBusy(datasetId);
+    try {
+      const page = await api.readRows(datasetId, table, offset, 10);
+      setBrowser({ datasetId, table, offset, total: page.total_rows, rows: page.rows });
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function materialize(datasetId: string) {
     if (!sink) return;
     // FR-G.4: writing to a database is side-effecting — explicit user confirmation
@@ -204,6 +251,20 @@ export default function Home() {
       {showForm && (
         <div className="card">
           <h2>New Blueprint</h2>
+          {connections.length > 0 && (
+            <div className="row" style={{ marginBottom: "0.8rem" }}>
+              <select value={sink} onChange={(e) => setSink(e.target.value)}
+                      style={{ padding: "0.4rem", borderRadius: 6 }}>
+                {connections.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <button className="secondary" onClick={introspectInto}
+                      disabled={busy === "introspect"}>
+                introspect this database → prefill
+              </button>
+            </div>
+          )}
           <label>name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} />
           <label>authoring provider</label>
@@ -239,22 +300,60 @@ export default function Home() {
               <span className="badge">{bp.status}</span>{" "}
               {bp.artifactsVersion && <code className="muted">{bp.artifactsVersion}</code>}
             </div>
-            <button onClick={() => generate(bp.id)} disabled={busy === bp.id}>
-              generate dataset
-            </button>
+            <span className="row">
+              <button className="secondary" onClick={() => previewBlueprint(bp.id)}
+                      disabled={busy === bp.id}>
+                preview
+              </button>
+              <button onClick={() => generate(bp.id)} disabled={busy === bp.id}>
+                generate dataset
+              </button>
+            </span>
           </div>
+          {previews[bp.id] &&
+            Object.entries(previews[bp.id]).map(([table, rows]) => (
+              <div key={table} style={{ marginTop: "0.6rem", overflowX: "auto" }}>
+                <div className="muted">{table} (sample)</div>
+                <table style={{ borderCollapse: "collapse", fontSize: "0.78rem" }}>
+                  <thead>
+                    <tr>
+                      {rows[0] &&
+                        Object.keys(rows[0]).map((col) => (
+                          <th key={col} style={{ padding: "0.2rem 0.6rem", textAlign: "left",
+                                                 borderBottom: "1px solid var(--border)" }}>
+                            {col}
+                          </th>
+                        ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={i}>
+                        {Object.values(row).map((v, j) => (
+                          <td key={j} style={{ padding: "0.2rem 0.6rem" }}>
+                            <code>{String(v)}</code>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           {(datasets[bp.id] ?? []).map((ds) => (
             <div className="row spread" key={ds.id} style={{ marginTop: "0.6rem" }}>
               <div>
                 <span className={`badge ${ds.status}`}>{ds.status}</span>{" "}
                 <code className="muted">{ds.namespace}</code>{" "}
-                {ds.rowCounts && (
-                  <span className="muted">
-                    {Object.entries(ds.rowCounts)
-                      .map(([table, count]) => `${table}:${count}`)
-                      .join("  ")}
-                  </span>
-                )}
+                {ds.rowCounts &&
+                  Object.entries(ds.rowCounts).map(([table, count]) => (
+                    <button key={table} className="secondary"
+                            style={{ marginRight: "0.3rem", padding: "0.15rem 0.5rem",
+                                     fontSize: "0.75rem" }}
+                            onClick={() => browse(ds.id, table, 0)}>
+                      {table}: {count} ▸
+                    </button>
+                  ))}
               </div>
               {ds.status === "ready" && (
                 <span className="row">
@@ -299,6 +398,57 @@ export default function Home() {
           )}
         </div>
       ))}
+
+      {browser && (
+        <div className="card">
+          <div className="row spread">
+            <h2>
+              {browser.table} — rows {browser.offset + 1}–
+              {Math.min(browser.offset + browser.rows.length, browser.total)} of {browser.total}
+            </h2>
+            <span className="row">
+              <button className="secondary" disabled={browser.offset === 0}
+                      onClick={() => browse(browser.datasetId, browser.table,
+                                            Math.max(0, browser.offset - 10))}>
+                ◂ prev
+              </button>
+              <button className="secondary"
+                      disabled={browser.offset + browser.rows.length >= browser.total}
+                      onClick={() => browse(browser.datasetId, browser.table,
+                                            browser.offset + 10)}>
+                next ▸
+              </button>
+              <button className="secondary" onClick={() => setBrowser(null)}>close</button>
+            </span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", fontSize: "0.78rem" }}>
+              <thead>
+                <tr>
+                  {browser.rows[0] &&
+                    Object.keys(browser.rows[0]).map((col) => (
+                      <th key={col} style={{ padding: "0.2rem 0.6rem", textAlign: "left",
+                                             borderBottom: "1px solid var(--border)" }}>
+                        {col}
+                      </th>
+                    ))}
+                </tr>
+              </thead>
+              <tbody>
+                {browser.rows.map((row, i) => (
+                  <tr key={i}>
+                    {Object.values(row).map((v, j) => (
+                      <td key={j} style={{ padding: "0.2rem 0.6rem" }}>
+                        <code>{String(v)}</code>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </>
   );
 }

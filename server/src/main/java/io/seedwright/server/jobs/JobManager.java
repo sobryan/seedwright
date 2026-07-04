@@ -269,6 +269,12 @@ public class JobManager {
         });
     }
 
+    /** Preview / dry-run (FR-E.6): author-if-needed + a small in-memory sample. Synchronous. */
+    public Map<String, Object> preview(BlueprintEntity blueprint, int rowsPerTable) {
+        Map<String, Object> artifacts = ensureArtifacts(blueprint);
+        return engine.previewDataset(artifacts, read(blueprint.getSchemaJson(), MAP), rowsPerTable);
+    }
+
     private Map<String, Object> ensureArtifacts(BlueprintEntity blueprint) {
         if (blueprint.getArtifactsJson() != null) {
             return read(blueprint.getArtifactsJson(), MAP);
