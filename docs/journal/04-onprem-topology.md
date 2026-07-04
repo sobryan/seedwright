@@ -167,6 +167,34 @@ materialize button disabled until approved). server 12 — two new tests prove t
 -but-unapproved path is refused via both REST and a real MCP client, and that approve→load
 succeeds.
 
+## Slice 14 — non-Docker packaging: the shippable bundle
+
+The on-prem pivot's payoff: `./package.sh` produces a single relocatable
+`seedwright-<version>.tar.gz` a shop can drop on one host and run — **no build tools, no
+separate database**. Target prereqs collapse to **Java 21 + uv** (uv provides Python 3.12 and
+the data-engine's deps on first start; Maven/Node/npm are build-host-only).
+
+**How it relocates:** every moving part was already config-driven, so packaging is assembly +
+a bundle-relative `conf/application.yml` loaded via `--spring.config.additional-location`. The
+launcher (`bin/seedwright`) cd's to the bundle root so all `./` paths resolve there — H2 in
+`./data`, UI static export in `./ui`, drop-in JDBC drivers in `./drivers`, and the data-engine
+spawned as `uv run --project ./data-engine`. The Python projects ship as **source siblings**
+(data-engine + generation-library + authoring + postgres-loader) preserving the exact
+`../<name>` layout their pyprojects path-depend on, so uv resolves them identically to in-tree
+— a pre-built venv would hardcode absolute paths + platform and wouldn't relocate.
+
+**Proven from a relocated copy:** extracted the tarball into a fresh dir (a stand-in target
+host) and `./bin/seedwright start` → central server UP, jdbc-mcp UP, UI served (HTTP 200), then
+a REST create→generate ran green end-to-end (dataset ready, 20 rows, validation passed) — which
+means the server spawned uv and uv resolved the sibling projects with zero in-tree references.
+`stop`/`status` verified. Two real packaging bugs found and fixed by the live run: version
+parsing grabbed the Spring parent's `3.5.3` instead of the project's `0.0.1` (now reads the
+`<version>` following the project artifactId), and the status probe false-negatived jdbc-mcp
+(an MCP endpoint 400s a non-MCP ping — any HTTP code, not just 2xx, means UP).
+
+**Deferred:** a fully air-gapped bundle (vendored wheels so first start needs no network) —
+today the first `uv sync` fetches Python deps.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

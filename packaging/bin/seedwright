@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# seedwright on-prem launcher (ADR-0004). Runs the whole stack from a relocatable bundle:
+# central server (REST + UI + MCP) + the JDBC loader node, with the Python data-engine
+# spawned by the server over stdio.
+#
+#   seedwright start     build-free: start the stack
+#   seedwright stop      stop the stack
+#   seedwright status    show what's running
+#
+# Target prerequisites (NO build tools needed):
+#   - Java 21+            (java -version)
+#   - uv                  (https://docs.astral.sh/uv — provides Python 3.12 + deps for the
+#                          data-engine; first start resolves them, then they're cached)
+#
+# Configure datastore targets in conf/jdbc-mcp.yml (credentials stay on this node).
+# Drop extra JDBC driver jars (DB2, Oracle, …) into ./drivers.
+set -euo pipefail
+
+# Resolve the bundle root (parent of bin/) and run everything relative to it, so the tree
+# relocates: copy it anywhere, paths still work.
+BUNDLE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$BUNDLE"
+RUN_DIR="$BUNDLE/.run"
+SERVER_PORT="${SEEDWRIGHT_SERVER_PORT:-8080}"
+mkdir -p "$RUN_DIR" data drivers
+
+server_jar="$(echo lib/seedwright-server-*.jar)"
+jdbc_jar="$(echo lib/seedwright-jdbc-mcp-*.jar)"
+
+stop() {
+  for name in server jdbc-mcp; do
+    if [[ -f "$RUN_DIR/$name.pid" ]]; then
+      kill "$(cat "$RUN_DIR/$name.pid")" 2>/dev/null || true
+      rm -f "$RUN_DIR/$name.pid"
+      echo "stopped $name"
+    fi
+  done
+  pkill -f "io.seedwright.server.SeedwrightServerApplication" 2>/dev/null || true
+  pkill -f "io.seedwright.jdbcmcp.JdbcMcpApplication" 2>/dev/null || true
+}
+
+status() {
+  if curl -sf -o /dev/null "http://localhost:$SERVER_PORT/api/blueprints"; then
+    echo "central server : UP   http://localhost:$SERVER_PORT  (UI + REST + MCP at /mcp)"
+  else
+    echo "central server : down"
+  fi
+  # the MCP endpoint answers non-MCP probes with an HTTP error (4xx) — any response code
+  # means the node is listening; "000" (no connection) means it's down.
+  code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/mcp 2>/dev/null || true)"
+  if [[ -n "$code" && "$code" != "000" ]]; then
+    echo "jdbc-mcp node  : UP   http://localhost:8081/mcp"
+  else
+    echo "jdbc-mcp node  : down"
+  fi
+}
+
+case "${1:-start}" in
+  stop)   stop; exit 0 ;;
+  status) status; exit 0 ;;
+  start)  ;;
+  *) echo "usage: seedwright [start|stop|status]"; exit 1 ;;
+esac
+
+echo "==> checking prerequisites"
+command -v java >/dev/null || { echo "missing prerequisite: java 21+"; exit 1; }
+command -v uv   >/dev/null || { echo "missing prerequisite: uv (https://docs.astral.sh/uv)"; exit 1; }
+
+echo "==> preparing the Python data-engine (uv — first run resolves Python 3.12 + deps)"
+(cd "$BUNDLE/data-engine" && uv sync -q)
+
+echo "==> starting the JDBC loader node (port 8081)"
+nohup java -jar "$jdbc_jar" \
+  --spring.config.additional-location="file:$BUNDLE/conf/jdbc-mcp.yml" \
+  --seedwright.driver-dir="$BUNDLE/drivers" \
+  > "$RUN_DIR/jdbc-mcp.log" 2>&1 &
+echo $! > "$RUN_DIR/jdbc-mcp.pid"
+
+echo "==> starting the central server (port $SERVER_PORT)"
+nohup java -jar "$server_jar" \
+  --spring.config.additional-location="file:$BUNDLE/conf/application.yml" \
+  --server.port="$SERVER_PORT" \
+  > "$RUN_DIR/server.log" 2>&1 &
+echo $! > "$RUN_DIR/server.pid"
+
+printf "==> waiting for the stack"
+for _ in $(seq 1 60); do
+  if curl -sf -o /dev/null "http://localhost:$SERVER_PORT/api/blueprints"; then break; fi
+  printf "."; sleep 2
+done
+echo
+status
+cat <<EOF
+
+seedwright is up.
+  UI     http://localhost:$SERVER_PORT/
+  REST   http://localhost:$SERVER_PORT/api
+  MCP    http://localhost:$SERVER_PORT/mcp    (agents: Copilot CLI, Claude Code, …)
+  logs   .run/server.log  .run/jdbc-mcp.log
+  data   ./data   (H2 metadata + canonical Parquet — persists restarts)
+
+Stop with: seedwright stop
+EOF

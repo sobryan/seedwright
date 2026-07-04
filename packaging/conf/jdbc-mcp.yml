@@ -1,0 +1,20 @@
+# seedwright JDBC loader node — named datastore connections (spec §7).
+# Credentials live HERE, on this node, never in the central server or any model. The server
+# and agents reference connections by NAME only. Loaded via --spring.config.additional-location.
+#
+# Add your targets under seedwright.connections. Use a LEAST-PRIVILEGE role: the loader needs
+# INSERT + CREATE/DROP within its dedicated ds_ schemas, never broad DDL on your real tables.
+# Drop-in JDBC drivers (DB2, Oracle, …) go in ./drivers next to the launcher.
+#
+# Prefer env vars for secrets: ${WAREHOUSE_PASSWORD} reads the environment at boot.
+
+seedwright:
+  connections: {}
+    # warehouse:
+    #   url: jdbc:postgresql://db.internal:5432/warehouse
+    #   username: seedwright_loader
+    #   password: ${WAREHOUSE_PASSWORD}
+    # legacy-db2:
+    #   url: jdbc:db2://mainframe.internal:50000/PROD
+    #   username: seedwright_loader
+    #   password: ${DB2_PASSWORD}

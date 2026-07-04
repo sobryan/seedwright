@@ -1,0 +1,31 @@
+# seedwright on-prem bundle overrides (ADR-0004).
+# Loaded via --spring.config.additional-location by bin/seedwright, so these take precedence
+# over the values baked into the server jar. Every path here is resolved relative to the
+# bundle root (the launcher cd's there before starting the JVM), so the whole tree relocates.
+
+spring:
+  datasource:
+    # Metadata lives in the bundle's data/ dir and survives sudden restarts (H2 file mode).
+    url: jdbc:h2:file:./data/seedwright;DB_CLOSE_ON_EXIT=FALSE
+  web:
+    resources:
+      # The Next.js static export shipped in the bundle — UI at http://localhost:8080/,
+      # no Node process at runtime.
+      static-locations: file:./ui/
+
+seedwright:
+  work-dir: ./data/datasets
+  data-engine:
+    # The bundle ships the data-engine as source; uv resolves Python 3.12 + deps (cached
+    # after first start). Spawned by the server over stdio.
+    command: uv
+    args:
+      - run
+      - --project
+      - ./data-engine
+      - seedwright-data-engine
+    request-timeout: PT30M
+  jdbc-mcp:
+    # The JDBC loader node the launcher starts alongside the server (same host on-prem;
+    # later the same jar deploys next to a remote datastore — just point this elsewhere).
+    url: http://127.0.0.1:8081
