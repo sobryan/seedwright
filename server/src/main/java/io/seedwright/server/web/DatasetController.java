@@ -114,8 +114,12 @@ public class DatasetController {
                     .body(Map.of("error", "dataset is not ready", "status", dataset.getStatus()));
         }
         String mode = request.mode() == null ? "replace" : request.mode();
-        String jobId = jobManager.submitMaterialization(dataset, request.connection(), mode);
-        return ResponseEntity.accepted().body(Map.of("jobId", jobId, "datasetId", id));
+        try {
+            String jobId = jobManager.submitMaterialization(dataset, request.connection(), mode);
+            return ResponseEntity.accepted().body(Map.of("jobId", jobId, "datasetId", id));
+        } catch (io.seedwright.server.jobs.JobManager.ApprovalRequiredException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
     }
 
     public record TeardownRequest(String connection, Boolean confirm) {}

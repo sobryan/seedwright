@@ -80,8 +80,29 @@ class MaterializationFlowTest {
     }
 
     @Test
+    void materializeRequiresApprovedArtifacts() {
+        String datasetId = makeReadyDataset();
+        // confirmed, but artifacts are pending_approval -> refused (FR-L.5)
+        ResponseEntity<Map> refused = rest.postForEntity(
+                "/api/datasets/" + datasetId + "/materialize",
+                Map.of("connection", "warehouse", "confirm", true), Map.class);
+        assertThat(refused.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(refused.getBody().get("error").toString()).contains("approve");
+    }
+
+    private void approve(String datasetId) {
+        Map<?, ?> dataset = rest.getForObject("/api/datasets/" + datasetId, Map.class);
+        String blueprintId = (String) dataset.get("blueprintId");
+        ResponseEntity<Map> approved = rest.postForEntity(
+                "/api/blueprints/" + blueprintId + "/approve",
+                Map.of("approvedBy", "test human"), Map.class);
+        assertThat(approved.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
     void materializeThenTeardownRoundtrip() {
         String datasetId = makeReadyDataset();
+        approve(datasetId);
 
         ResponseEntity<Map> accepted = rest.postForEntity(
                 "/api/datasets/" + datasetId + "/materialize",

@@ -56,6 +56,16 @@ public class BlueprintEntity {
     /** Authoring provider: 'heuristic' (default, no LLM) or 'copilot-cli'. */
     private String provider;
 
+    /** FR-L.5: 'pending_approval' | 'approved' for the CURRENT artifacts version. */
+    @Column(name = "artifacts_approval")
+    private String artifactsApproval;
+
+    @Column(name = "artifacts_approved_by")
+    private String artifactsApprovedBy;
+
+    @Column(name = "artifacts_approved_at")
+    private Instant artifactsApprovedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -86,6 +96,12 @@ public class BlueprintEntity {
     public void setArtifactsVersion(String artifactsVersion) { this.artifactsVersion = artifactsVersion; }
     public String getProvider() { return provider; }
     public void setProvider(String provider) { this.provider = provider; }
+    public String getArtifactsApproval() { return artifactsApproval; }
+    public void setArtifactsApproval(String artifactsApproval) { this.artifactsApproval = artifactsApproval; }
+    public String getArtifactsApprovedBy() { return artifactsApprovedBy; }
+    public void setArtifactsApprovedBy(String artifactsApprovedBy) { this.artifactsApprovedBy = artifactsApprovedBy; }
+    public Instant getArtifactsApprovedAt() { return artifactsApprovedAt; }
+    public void setArtifactsApprovedAt(Instant artifactsApprovedAt) { this.artifactsApprovedAt = artifactsApprovedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

@@ -136,6 +136,37 @@ at your DB" is now a UI flow, not just an agent flow.
 Live-verified end-to-end with the temporal demo schema: instant preview (dates + tz-aware
 timestamps), then paging through 249 generated orders. data-engine 36, server 11.
 
+## Slice 13 — artifact approval workflow (FR-L.5): the last unenforced safety gate
+
+The spec's non-negotiables include **human approval before generated code first runs
+against a real target**. Everything else in FR-L was enforced (ds_ scoping, marker-guarded
+drops, confirm-gated writes, injection-safe identifiers) — approval was tracked but not
+*enforced*. This slice closes it.
+
+**The gate:** materialization now fails fast at submission unless the EXACT artifacts
+version that produced the dataset is human-approved (`JobManager.requireApprovedArtifacts`
+→ `ApprovalRequiredException` → 409). Two independent conditions: approval flag = `approved`,
+AND the dataset's `artifactsVersion` matches the blueprint's current one (regenerating with
+new artifacts after approval doesn't inherit the old approval).
+
+**Approval resets on (re)authoring:** whenever the loop writes fresh artifacts, the blueprint
+drops back to `pending_approval` (approving stale-then-changed artifacts is impossible by
+construction). Approval is a *named* act — `approvedBy` is required and recorded with a
+timestamp (V4 migration adds the three columns).
+
+Because our artifacts are **declarative genspecs, not freeform code**, the "static analysis"
+half of FR-L.5 is already satisfied upstream (schema validation + determinism gate); approval
+presents that vouched-for artifact to a human rather than re-scanning arbitrary code.
+
+**Surfaced on all three faces:** REST (`GET /blueprints/{id}/artifacts` to review,
+`POST /blueprints/{id}/approve`), the product-MCP surface (`get_artifacts` +
+`approve_artifacts`, whose description tells the agent approval is a human act — pass the
+user's name, only after they've reviewed), and the UI (pending/approved badge, a
+"review & approve" button that shows the artifacts and captures the approver, and a
+materialize button disabled until approved). server 12 — two new tests prove the confirmed
+-but-unapproved path is refused via both REST and a real MCP client, and that approve→load
+succeeds.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

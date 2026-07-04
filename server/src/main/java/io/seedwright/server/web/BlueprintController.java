@@ -79,6 +79,57 @@ public class BlueprintController {
         return ResponseEntity.noContent().build();
     }
 
+    /** The authored Generator Artifacts — what a human reviews before approving (FR-L.5). */
+    @GetMapping("/{id}/artifacts")
+    public ResponseEntity<Map<String, Object>> artifacts(@PathVariable String id) {
+        return blueprints.findById(id)
+                .map(bp -> {
+                    if (bp.getArtifactsJson() == null) {
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT)
+                                .body(Map.<String, Object>of(
+                                        "error", "no artifacts yet — generate or preview first"));
+                    }
+                    Map<String, Object> body = new java.util.LinkedHashMap<>();
+                    body.put("artifactsVersion", bp.getArtifactsVersion());
+                    body.put("approval", bp.getArtifactsApproval());
+                    body.put("approvedBy", bp.getArtifactsApprovedBy());
+                    body.put("approvedAt", bp.getArtifactsApprovedAt());
+                    body.put("artifacts", parse(bp.getArtifactsJson()));
+                    return ResponseEntity.ok(body);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    public record ApproveRequest(String approvedBy) {}
+
+    /** Human approval of the current artifacts version (FR-L.5) — gates DB materialization. */
+    @PostMapping("/{id}/approve")
+    public ResponseEntity<Map<String, Object>> approve(
+            @PathVariable String id, @RequestBody ApproveRequest request) {
+        return blueprints.findById(id)
+                .map(bp -> {
+                    if (bp.getArtifactsJson() == null) {
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT)
+                                .body(Map.<String, Object>of(
+                                        "error", "no artifacts to approve — generate or preview first"));
+                    }
+                    if (request.approvedBy() == null || request.approvedBy().isBlank()) {
+                        return ResponseEntity.badRequest().body(Map.<String, Object>of(
+                                "error", "approvedBy is required — approval is a named human act"));
+                    }
+                    bp.setArtifactsApproval("approved");
+                    bp.setArtifactsApprovedBy(request.approvedBy().trim());
+                    bp.setArtifactsApprovedAt(Instant.now());
+                    bp.setUpdatedAt(Instant.now());
+                    blueprints.save(bp);
+                    return ResponseEntity.ok(Map.<String, Object>of(
+                            "artifactsVersion", bp.getArtifactsVersion(),
+                            "approval", "approved",
+                            "approvedBy", bp.getArtifactsApprovedBy()));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     /** Preview / dry-run (FR-E.6): a small sample without materializing anything. */
     @PostMapping("/{id}/preview")
     public ResponseEntity<Map<String, Object>> preview(
@@ -121,6 +172,8 @@ public class BlueprintController {
         dto.put("foreignKeys", parse(entity.getForeignKeysJson()));
         dto.put("volumes", parse(entity.getVolumesJson()));
         dto.put("artifactsVersion", entity.getArtifactsVersion());
+        dto.put("artifactsApproval", entity.getArtifactsApproval());
+        dto.put("artifactsApprovedBy", entity.getArtifactsApprovedBy());
         dto.put("provider", entity.getProvider());
         dto.put("createdAt", entity.getCreatedAt());
         dto.put("updatedAt", entity.getUpdatedAt());

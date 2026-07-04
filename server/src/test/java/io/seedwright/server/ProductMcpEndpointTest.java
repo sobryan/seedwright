@@ -84,7 +84,7 @@ class ProductMcpEndpointTest {
         assertThat(names).contains(
                 "list_connections", "introspect_connection", "list_blueprints",
                 "create_blueprint", "generate_dataset", "get_job", "list_datasets",
-                "get_dataset", "export_dataset", "materialize_dataset", "teardown_dataset");
+                "get_dataset", "export_dataset", "get_artifacts", "approve_artifacts", "materialize_dataset", "teardown_dataset");
     }
 
     @Test
@@ -111,6 +111,19 @@ class ProductMcpEndpointTest {
                 Map.of("dataset_id", datasetId, "connection", "warehouse", "confirm", false)));
         assertThat(refused.isError()).isTrue();
         assertThat(refused.content().toString()).contains("confirm");
+
+        // confirmed but UNAPPROVED artifacts -> refused with actionable guidance (FR-L.5)
+        CallToolResult unapproved = client.callTool(new CallToolRequest("materialize_dataset",
+                Map.of("dataset_id", datasetId, "connection", "warehouse", "confirm", true)));
+        assertThat(unapproved.isError()).isTrue();
+        assertThat(unapproved.content().toString()).contains("approve");
+
+        // review + approve via the agent surface (a named human act)
+        Map<String, Object> artifacts = call("get_artifacts", Map.of("blueprint_id", blueprintId));
+        assertThat(artifacts.get("approval")).isEqualTo("pending_approval");
+        Map<String, Object> approval = call("approve_artifacts",
+                Map.of("blueprint_id", blueprintId, "approved_by", "test human"));
+        assertThat(approval.get("approval")).isEqualTo("approved");
 
         Map<String, Object> materialized = call("materialize_dataset", Map.of(
                 "dataset_id", datasetId, "connection", "warehouse",

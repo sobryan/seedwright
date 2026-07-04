@@ -220,6 +220,29 @@ export default function Home() {
     }
   }
 
+  async function reviewAndApprove(blueprintId: string) {
+    setBusy(blueprintId);
+    try {
+      // FR-L.5: show the human the exact artifacts they're vouching for, then capture
+      // a named approval — this is what gates any write into a real database.
+      const a = await api.getArtifacts(blueprintId);
+      const summary = JSON.stringify(a.artifacts, null, 2);
+      const approvedBy = prompt(
+        `Review generator artifacts ${a.artifactsVersion} (${a.approval}).\n\n` +
+          `${summary.slice(0, 1200)}${summary.length > 1200 ? "\n…(truncated)" : ""}\n\n` +
+          `Approving authorizes loading data built from these artifacts into a real ` +
+          `database. Enter your name to approve, or cancel.`,
+      );
+      if (!approvedBy || !approvedBy.trim()) return;
+      await api.approveArtifacts(blueprintId, approvedBy.trim());
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function teardown(datasetId: string, connection: string) {
     if (!confirm(`Tear this dataset down from "${connection}"? (deletes its ds_ schema)`)) return;
     setBusy(datasetId);
@@ -298,9 +321,24 @@ export default function Home() {
             <div>
               <strong>{bp.name}</strong>{" "}
               <span className="badge">{bp.status}</span>{" "}
-              {bp.artifactsVersion && <code className="muted">{bp.artifactsVersion}</code>}
+              {bp.artifactsVersion && <code className="muted">{bp.artifactsVersion}</code>}{" "}
+              {bp.artifactsVersion && (
+                <span className="badge"
+                      style={{ background: bp.artifactsApproval === "approved" ? "#1a7f37" : "#9a6700" }}
+                      title={bp.artifactsApprovedBy ? `approved by ${bp.artifactsApprovedBy}` : ""}>
+                  {bp.artifactsApproval === "approved"
+                    ? `approved · ${bp.artifactsApprovedBy}`
+                    : "pending approval"}
+                </span>
+              )}
             </div>
             <span className="row">
+              {bp.artifactsVersion && bp.artifactsApproval !== "approved" && (
+                <button className="secondary" onClick={() => reviewAndApprove(bp.id)}
+                        disabled={busy === bp.id}>
+                  review & approve
+                </button>
+              )}
               <button className="secondary" onClick={() => previewBlueprint(bp.id)}
                       disabled={busy === bp.id}>
                 preview
@@ -365,7 +403,10 @@ export default function Home() {
                           <option key={c} value={c}>{c}</option>
                         ))}
                       </select>
-                      <button onClick={() => materialize(ds.id)} disabled={busy === ds.id}>
+                      <button onClick={() => materialize(ds.id)}
+                              disabled={busy === ds.id || bp.artifactsApproval !== "approved"}
+                              title={bp.artifactsApproval !== "approved"
+                                ? "approve the generator artifacts first (FR-L.5)" : ""}>
                         load to db
                       </button>
                     </>

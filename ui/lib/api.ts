@@ -23,7 +23,17 @@ export interface Blueprint {
   status: string;
   seed: number;
   artifactsVersion?: string;
+  artifactsApproval?: string;
+  artifactsApprovedBy?: string;
   schema: Record<string, unknown>;
+}
+
+export interface Artifacts {
+  artifactsVersion?: string;
+  approval?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  artifacts: Record<string, unknown>;
 }
 
 export interface Job {
@@ -85,6 +95,13 @@ export const api = {
   readRows: (datasetId: string, table: string, offset: number, limit: number) =>
     request<{ total_rows: number; rows: Record<string, unknown>[] }>(
       `/api/datasets/${datasetId}/rows?table=${encodeURIComponent(table)}&offset=${offset}&limit=${limit}`,
+    ),
+  getArtifacts: (blueprintId: string) =>
+    request<Artifacts>(`/api/blueprints/${blueprintId}/artifacts`),
+  approveArtifacts: (blueprintId: string, approvedBy: string) =>
+    request<{ approval: string; approvedBy: string }>(
+      `/api/blueprints/${blueprintId}/approve`,
+      { method: "POST", body: JSON.stringify({ approvedBy }) },
     ),
   materialize: (id: string, connection: string) =>
     request<{ jobId: string }>(`/api/datasets/${id}/materialize`, {

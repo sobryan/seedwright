@@ -106,6 +106,61 @@ public class ApiTools {
                                 "required", List.of("name", "schema")),
                         this::createBlueprint),
 
+                spec("get_artifacts",
+                        "Inspect a Blueprint's authored Generator Artifacts (the declarative "
+                                + "genspec + data-tests + provenance) — what a human reviews "
+                                + "before approving (FR-L.5).",
+                        Map.of("type", "object",
+                                "properties", Map.of("blueprint_id", Map.of("type", "string")),
+                                "required", List.of("blueprint_id")),
+                        args -> {
+                            BlueprintEntity bp = blueprints
+                                    .findById((String) args.get("blueprint_id"))
+                                    .orElseThrow(() -> new IllegalArgumentException("no such blueprint"));
+                            if (bp.getArtifactsJson() == null) {
+                                throw new IllegalStateException(
+                                        "no artifacts yet — generate or preview first");
+                            }
+                            Map<String, Object> out = new LinkedHashMap<>();
+                            out.put("artifactsVersion", bp.getArtifactsVersion());
+                            out.put("approval", bp.getArtifactsApproval());
+                            out.put("approvedBy", bp.getArtifactsApprovedBy());
+                            out.put("artifacts", read(bp.getArtifactsJson()));
+                            return out;
+                        }),
+
+                spec("approve_artifacts",
+                        "Record HUMAN approval of a Blueprint's current artifacts (FR-L.5) — "
+                                + "required before any database materialization. Approval is a "
+                                + "human act: only call this after the user has reviewed the "
+                                + "artifacts and explicitly said to approve, and pass THEIR name "
+                                + "as approved_by.",
+                        Map.of("type", "object",
+                                "properties", Map.of(
+                                        "blueprint_id", Map.of("type", "string"),
+                                        "approved_by", Map.of("type", "string")),
+                                "required", List.of("blueprint_id", "approved_by")),
+                        args -> {
+                            BlueprintEntity bp = blueprints
+                                    .findById((String) args.get("blueprint_id"))
+                                    .orElseThrow(() -> new IllegalArgumentException("no such blueprint"));
+                            String approver = (String) args.get("approved_by");
+                            if (bp.getArtifactsJson() == null) {
+                                throw new IllegalStateException(
+                                        "no artifacts to approve — generate or preview first");
+                            }
+                            if (approver == null || approver.isBlank()) {
+                                throw new IllegalArgumentException(
+                                        "approved_by is required — approval is a named human act");
+                            }
+                            bp.setArtifactsApproval("approved");
+                            bp.setArtifactsApprovedBy(approver.trim());
+                            bp.setArtifactsApprovedAt(java.time.Instant.now());
+                            blueprints.save(bp);
+                            return Map.of("artifactsVersion", bp.getArtifactsVersion(),
+                                    "approval", "approved", "approvedBy", approver.trim());
+                        }),
+
                 spec("preview_blueprint",
                         "Preview a small sample of what a Blueprint would generate (dry-run, "
                                 + "no files, no database). Authors the generator first if needed.",
