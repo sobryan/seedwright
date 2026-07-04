@@ -9,16 +9,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 from seedwright_genlib.generators import (
     Categorical,
+    DateRange,
     DecimalRange,
     FakerField,
     Generator,
     IntRange,
     Serial,
+    TimestampRange,
 )
 from seedwright_genlib.types import TypeKind
 
@@ -62,6 +65,18 @@ def _faker(p: dict[str, Any]) -> Generator:
     return FakerField(p["method"], p.get("locale"), **p.get("kwargs", {}))
 
 
+def _date_range(p: dict[str, Any]) -> Generator:
+    return DateRange(date.fromisoformat(str(p["low"])), date.fromisoformat(str(p["high"])))
+
+
+def _timestamp_range(p: dict[str, Any]) -> Generator:
+    return TimestampRange(
+        datetime.fromisoformat(str(p["low"])),
+        datetime.fromisoformat(str(p["high"])),
+        tz=bool(p.get("tz", False)),
+    )
+
+
 def _fk(p: dict[str, Any]) -> Generator:
     return _FK_PLACEHOLDER
 
@@ -77,6 +92,10 @@ GENERATOR_CATALOG: dict[str, CatalogEntry] = {
     ),
     "faker": CatalogEntry(
         "faker", frozenset({TypeKind.STRING, TypeKind.UUID, TypeKind.JSON}), _faker
+    ),
+    "date_range": CatalogEntry("date_range", frozenset({TypeKind.DATE}), _date_range),
+    "timestamp_range": CatalogEntry(
+        "timestamp_range", frozenset({TypeKind.TIMESTAMP}), _timestamp_range
     ),
     # fk is type-agnostic here; FK-specific checks (resolves, matches parent) live in validate.
     "fk": CatalogEntry("fk", _ALL_KINDS, _fk),

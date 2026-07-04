@@ -8,6 +8,7 @@ the loop instead of refining). An empty list means the genspec is safe to compil
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from seedwright_genlib.types import TypeKind
@@ -191,6 +192,39 @@ def _validate_params(table: GenTable, col: GenColumn, imported: ImportedSchema) 
     if kind == "faker":
         if not isinstance(p.get("method"), str):
             return params_bad("faker needs a string 'method'")
+        return []
+
+    if kind == "date_range":
+        if not all(k in p for k in ("low", "high")):
+            return params_bad("date_range needs ISO 'low' and 'high'")
+        try:
+            low_d, high_d = date.fromisoformat(str(p["low"])), date.fromisoformat(str(p["high"]))
+        except ValueError:
+            return params_bad("date_range 'low'/'high' must be ISO dates (YYYY-MM-DD)")
+        if low_d > high_d:
+            return [_issue("RANGE_INVALID", table.name, col.name,
+                           f"date_range low {low_d} > high {high_d}", "make low <= high")]
+        return []
+
+    if kind == "timestamp_range":
+        if not all(k in p for k in ("low", "high")):
+            return params_bad("timestamp_range needs ISO 'low' and 'high'")
+        try:
+            low_t = datetime.fromisoformat(str(p["low"]))
+            high_t = datetime.fromisoformat(str(p["high"]))
+        except ValueError:
+            return params_bad("timestamp_range 'low'/'high' must be ISO datetimes")
+        if low_t.tzinfo is not None or high_t.tzinfo is not None:
+            return params_bad("give timestamp_range bounds as naive ISO datetimes; "
+                              "set 'tz' to control awareness")
+        if low_t > high_t:
+            return [_issue("RANGE_INVALID", table.name, col.name,
+                           f"timestamp_range low {low_t} > high {high_t}", "make low <= high")]
+        column_tz = imported.column_type(table.name, col.name).tz
+        if bool(p.get("tz", False)) != column_tz:
+            return [_issue("TZ_MISMATCH", table.name, col.name,
+                           f"generator tz {bool(p.get('tz', False))} != column tz {column_tz}",
+                           f"set timestamp_range tz to {str(column_tz).lower()}")]
         return []
 
     return []

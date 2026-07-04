@@ -58,6 +58,10 @@ Generator catalog (the ONLY kinds allowed, with type compatibility):
 - categorical {"values": [...], "weights": [optional floats]} — strings/ints/booleans;
   use the rule's enum values verbatim when a rule declares one
 - faker {"method": "<faker method like email, name, word>"} — STRING/UUID/JSON columns
+- date_range {"low": "YYYY-MM-DD", "high": "YYYY-MM-DD"} — DATE columns
+- timestamp_range {"low": "YYYY-MM-DDTHH:MM:SS", "high": "...", "tz": bool} — TIMESTAMP
+  columns; bounds are naive ISO datetimes; tz MUST equal the column's tz (true only for
+  'timestamp with time zone' columns)
 - {"kind": "fk", "params": {}} — REQUIRED for every declared foreign-key column, and for
   no other column
 

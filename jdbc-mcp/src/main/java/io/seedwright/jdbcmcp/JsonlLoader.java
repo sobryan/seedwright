@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,13 +12,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,13 +20,17 @@ import java.util.Map;
 /**
  * Scoped dataset load/teardown over JDBC (spec FR-G, FR-L), mirroring the proven Python loader's
  * safety model: data lands ONLY in a validated {@code ds_} schema; an ownership marker table
- * ({@code _seedwright}) is written at create and REQUIRED before any drop; teardown is a single
- * schema-level drop (never table-level deletes); the whole load runs in one transaction with a
- * pre-commit row-count verification — a mismatch rolls everything back (FR-F.1c, FR-E.4).
+ * ({@code _seedwright}) is written at create and REQUIRED before any drop; the whole load runs in
+ * one transaction with a pre-commit row-count verification (FR-F.1c, FR-E.4).
+ *
+ * <p>Dialect handling is data + two flags ({@link Dialect}): type DDL via {@link TypeMap}, bind
+ * values via {@link BindValues}. Teardown and existence checks are PORTABLE by construction —
+ * tables are enumerated via JDBC metadata and dropped individually (each schema-qualified into
+ * the validated namespace), then {@code DROP SCHEMA <ns> RESTRICT} — because DB2 LUW has no
+ * {@code DROP SCHEMA ... CASCADE}, and an unspecified dialect can't be assumed to either.
  *
  * <p>v1 consumes the data-engine's fidelity-preserving JSONL export (+ Load Plan) rather than
- * Parquet directly — decimals travel as exact strings and are bound via {@link BigDecimal};
- * direct Parquet reading in Java is a deferred enhancement.
+ * Parquet directly; direct Parquet reading in Java is a deferred enhancement.
  */
 public final class JsonlLoader {
 
@@ -62,7 +59,7 @@ public final class JsonlLoader {
         if (!"create".equals(mode) && !"replace".equals(mode)) {
             throw new IllegalArgumentException("mode must be create|replace, got: " + mode);
         }
-        String product = conn.getMetaData().getDatabaseProductName();
+        Dialect dialect = Dialect.resolve(conn.getMetaData().getDatabaseProductName());
         boolean previousAutoCommit = conn.getAutoCommit();
         conn.setAutoCommit(false);
         try (Statement ddl = conn.createStatement()) {
@@ -73,7 +70,7 @@ public final class JsonlLoader {
                             "schema exists and mode=create: " + namespace);
                 }
                 requireSeedwrightMarker(conn, namespace);
-                ddl.execute("DROP SCHEMA " + SafeSql.quoteIdentifier(namespace) + " CASCADE");
+                dropSchemaScoped(conn, namespace);
             }
             ddl.execute("CREATE SCHEMA " + SafeSql.quoteIdentifier(namespace));
             ddl.execute("CREATE TABLE " + SafeSql.qualified(namespace, MARKER_TABLE)
@@ -86,14 +83,14 @@ public final class JsonlLoader {
             for (Map<String, Object> table : tables(loadPlan)) {
                 String name = (String) table.get("name");
                 List<Map<String, Object>> columns = columns(table);
-                ddl.execute(createTableSql(product, namespace, name, columns));
-                long rows = copyJsonl(conn, dataDir, namespace, name, columns);
+                ddl.execute(createTableSql(dialect, namespace, name, columns));
+                long rows = copyJsonl(conn, dialect, dataDir, namespace, name, columns);
                 verifyRowCount(conn, namespace, name, rows);
                 tableResults.put(name, rows);
                 totalRows += rows;
             }
             conn.commit();
-            return Map.of("namespace", namespace, "mode", mode,
+            return Map.of("namespace", namespace, "mode", mode, "dialect", dialect.name(),
                     "total_rows", totalRows, "tables", tableResults);
         } catch (Exception e) {
             conn.rollback();
@@ -103,16 +100,14 @@ public final class JsonlLoader {
         }
     }
 
-    /** Idempotent, marker-guarded teardown: a single scoped schema drop. */
+    /** Idempotent, marker-guarded teardown: metadata-listed drops, all inside the namespace. */
     public Map<String, Object> teardownDataset(Connection conn, String namespace)
             throws SQLException {
         SafeSql.validateNamespace(namespace);
         boolean exists = schemaExists(conn, namespace);
         if (exists) {
             requireSeedwrightMarker(conn, namespace);
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute("DROP SCHEMA " + SafeSql.quoteIdentifier(namespace) + " CASCADE");
-            }
+            dropSchemaScoped(conn, namespace);
         }
         return Map.of("namespace", namespace, "existed", exists);
     }
@@ -148,7 +143,7 @@ public final class JsonlLoader {
         return (List<Map<String, Object>>) table.get("columns");
     }
 
-    private String createTableSql(String product, String namespace, String table,
+    private String createTableSql(Dialect dialect, String namespace, String table,
                                   List<Map<String, Object>> columns) {
         StringBuilder sql = new StringBuilder("CREATE TABLE ")
                 .append(SafeSql.qualified(namespace, table)).append(" (");
@@ -159,7 +154,7 @@ public final class JsonlLoader {
             }
             sql.append(SafeSql.quoteIdentifier((String) col.get("name")))
                     .append(' ')
-                    .append(TypeMap.columnType(product, col));
+                    .append(TypeMap.columnType(dialect, col));
             if (Boolean.FALSE.equals(col.get("nullable"))) {
                 sql.append(" NOT NULL");
             }
@@ -167,8 +162,9 @@ public final class JsonlLoader {
         return sql.append(')').toString();
     }
 
-    private long copyJsonl(Connection conn, Path dataDir, String namespace, String table,
-                           List<Map<String, Object>> columns) throws SQLException, IOException {
+    private long copyJsonl(Connection conn, Dialect dialect, Path dataDir, String namespace,
+                           String table, List<Map<String, Object>> columns)
+            throws SQLException, IOException {
         Path file = resolveJsonl(dataDir, table);
         String placeholders = String.join(", ", java.util.Collections.nCopies(columns.size(), "?"));
         String columnList = columns.stream()
@@ -190,8 +186,9 @@ public final class JsonlLoader {
                 JsonNode row = json.readTree(line);
                 for (int i = 0; i < columns.size(); i++) {
                     Map<String, Object> col = columns.get(i);
-                    bind(stmt, i + 1, row.get((String) col.get("name")),
-                            (String) col.get("canonical_kind"));
+                    stmt.setObject(i + 1, BindValues.convert(
+                            dialect, (String) col.get("canonical_kind"),
+                            row.get((String) col.get("name"))));
                 }
                 stmt.addBatch();
                 rows++;
@@ -220,31 +217,26 @@ public final class JsonlLoader {
         return path;
     }
 
-    private void bind(PreparedStatement stmt, int index, JsonNode value, String kind)
-            throws SQLException {
-        if (value == null || value.isNull()) {
-            stmt.setObject(index, null);
-            return;
+    /**
+     * Drop the namespace WITHOUT `DROP SCHEMA ... CASCADE` (DB2 LUW doesn't have it; an
+     * unspecified dialect can't be assumed to): enumerate the schema's tables via JDBC metadata,
+     * drop each (always schema-qualified into the validated namespace), then drop the schema
+     * RESTRICT. Still provably scoped — nothing outside the namespace is ever named.
+     */
+    private void dropSchemaScoped(Connection conn, String namespace) throws SQLException {
+        SafeSql.validateNamespace(namespace);
+        List<String> tables = new ArrayList<>();
+        try (ResultSet rs = conn.getMetaData().getTables(null, namespace, "%",
+                new String[] {"TABLE"})) {
+            while (rs.next()) {
+                tables.add(rs.getString("TABLE_NAME"));
+            }
         }
-        switch (kind) {
-            case "INT16", "INT32", "INT64" -> stmt.setLong(index, value.asLong());
-            case "FLOAT32", "FLOAT64" -> stmt.setDouble(index, value.asDouble());
-            case "DECIMAL" -> stmt.setBigDecimal(index, new BigDecimal(value.asText()));
-            case "BOOLEAN" -> stmt.setBoolean(index, value.asBoolean());
-            case "DATE" -> stmt.setObject(index, LocalDate.parse(value.asText()));
-            case "TIME" -> stmt.setObject(index, LocalTime.parse(value.asText()));
-            case "TIMESTAMP" -> stmt.setObject(index, parseTimestamp(value.asText()));
-            case "BYTES" -> stmt.setBytes(index, HexFormat.of().parseHex(value.asText()));
-            default -> stmt.setString(index, value.asText()); // STRING, UUID, JSON
-        }
-    }
-
-    private Object parseTimestamp(String text) {
-        String normalized = text.replace(' ', 'T');
-        try {
-            return OffsetDateTime.parse(normalized);
-        } catch (DateTimeParseException e) {
-            return LocalDateTime.parse(normalized);
+        try (Statement stmt = conn.createStatement()) {
+            for (String table : tables) {
+                stmt.execute("DROP TABLE " + SafeSql.qualified(namespace, table));
+            }
+            stmt.execute("DROP SCHEMA " + SafeSql.quoteIdentifier(namespace) + " RESTRICT");
         }
     }
 
@@ -266,13 +258,10 @@ public final class JsonlLoader {
         }
     }
 
+    /** Portable existence check via JDBC metadata (DB2 has no information_schema). */
     private boolean schemaExists(Connection conn, String namespace) throws SQLException {
-        try (PreparedStatement stmt = conn.prepareStatement(
-                "SELECT 1 FROM information_schema.schemata WHERE schema_name = ?")) {
-            stmt.setString(1, namespace);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next();
-            }
+        try (ResultSet rs = conn.getMetaData().getSchemas(null, namespace)) {
+            return rs.next();
         }
     }
 

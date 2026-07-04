@@ -13,7 +13,8 @@ class ConnectionRegistryTest {
                     "warehouse", new ConnectionRegistry.ConnectionsProperties.Entry(
                             "jdbc:h2:mem:x", "sa", ""),
                     "analytics", new ConnectionRegistry.ConnectionsProperties.Entry(
-                            "jdbc:h2:mem:y", "sa", ""))));
+                            "jdbc:h2:mem:y", "sa", ""))),
+            new DriverDirectoryLoader(java.nio.file.Path.of("./no-such-driver-dir")));
 
     @Test
     void namesAreSortedAndCarryNoSecrets() {

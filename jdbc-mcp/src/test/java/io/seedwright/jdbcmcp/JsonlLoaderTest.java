@@ -158,4 +158,30 @@ class JsonlLoaderTest {
         assertThatThrownBy(() -> loader.loadDataset(conn, dataDir, LOAD_PLAN, "public", "replace"))
                 .isInstanceOf(SafeSql.UnsafeNamespaceException.class);
     }
+
+    @Test
+    void temporalColumnsRoundtrip() throws Exception {
+        java.nio.file.Files.writeString(dataDir.resolve("events.jsonl"), """
+                {"id": 1, "day": "2024-06-01", "at": "2026-07-04T10:00:00+00:00"}
+                {"id": 2, "day": "2020-01-01", "at": "2020-01-01T00:00:00+00:00"}
+                """);
+        Map<String, Object> plan = Map.of(
+                "namespace", "ds_temporal",
+                "tables", List.of(Map.of(
+                        "name", "events",
+                        "row_count", 2,
+                        "columns", List.of(
+                                Map.of("name", "id", "canonical_kind", "INT64", "nullable", false),
+                                Map.of("name", "day", "canonical_kind", "DATE", "nullable", false),
+                                Map.of("name", "at", "canonical_kind", "TIMESTAMP", "tz", true,
+                                        "nullable", false)))));
+        loader.loadDataset(conn, dataDir, plan, "ds_temporal", "replace");
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT \"day\", \"at\" FROM \"ds_temporal\".\"events\" WHERE \"id\" = 1")) {
+            rs.next();
+            assertThat(rs.getDate(1).toLocalDate().toString()).isEqualTo("2024-06-01");
+            assertThat(rs.getTimestamp(2).toInstant().toString()).startsWith("2026-07-04T10:00");
+        }
+    }
 }

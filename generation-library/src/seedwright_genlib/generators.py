@@ -15,6 +15,7 @@ New column types are added here without touching the engine (NFR-EXT).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -100,6 +101,45 @@ class DecimalRange:
             value = self._low + span * Decimal(float(f))
             out.append(value.quantize(self._quantum))
         return out
+
+
+class DateRange:
+    """Uniform dates in the inclusive range ``[low, high]`` (seeded, chunk-invariant)."""
+
+    def __init__(self, low: date, high: date) -> None:
+        if high < low:
+            raise ValueError(f"DateRange high ({high}) < low ({low})")
+        self._low = low
+        self._span_days = (high - low).days
+
+    def generate(self, rng: SeededRng, n: int, offset: int = 0) -> Sequence[date]:
+        offsets = rng.numpy().integers(0, self._span_days + 1, size=n)
+        return [self._low + timedelta(days=int(d)) for d in offsets]
+
+
+class TimestampRange:
+    """Uniform timestamps in ``[low, high]`` at second resolution.
+
+    ``tz=False`` emits naive datetimes (canonical ``TIMESTAMP`` without time zone);
+    ``tz=True`` emits UTC-aware datetimes (``timestamptz`` semantics, FR-M.4). ``low``/``high``
+    are given naive and interpreted as UTC wall time in the aware case.
+    """
+
+    def __init__(self, low: datetime, high: datetime, *, tz: bool = False) -> None:
+        if high < low:
+            raise ValueError(f"TimestampRange high ({high}) < low ({low})")
+        if low.tzinfo is not None or high.tzinfo is not None:
+            raise ValueError("give low/high as naive datetimes; tz=True makes outputs UTC-aware")
+        self._low = low
+        self._span_seconds = int((high - low).total_seconds())
+        self._tz = tz
+
+    def generate(self, rng: SeededRng, n: int, offset: int = 0) -> Sequence[datetime]:
+        seconds = rng.numpy().integers(0, self._span_seconds + 1, size=n)
+        values = [self._low + timedelta(seconds=int(s)) for s in seconds]
+        if self._tz:
+            return [v.replace(tzinfo=UTC) for v in values]
+        return values
 
 
 class FakerField:

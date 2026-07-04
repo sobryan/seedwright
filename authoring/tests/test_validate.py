@@ -49,8 +49,9 @@ def test_generator_incompatible() -> None:
 
 
 def test_no_mvp_generator_for_unsupported_kind() -> None:
-    spec = _spec(_table("t", [_col("ts", "TIMESTAMP", "faker", {"method": "iso8601"})]))
-    imported = ImportedSchema.from_sql_columns({"t": [("ts", "timestamp")]})
+    # BYTES still has no MVP generator (DATE/TIMESTAMP gained theirs in slice 11)
+    spec = _spec(_table("t", [_col("blob", "BYTES", "faker", {"method": "binary"})]))
+    imported = ImportedSchema.from_sql_columns({"t": [("blob", "bytea")]})
     assert "NO_MVP_GENERATOR" in _codes(validate_genspec(spec, imported))
 
 

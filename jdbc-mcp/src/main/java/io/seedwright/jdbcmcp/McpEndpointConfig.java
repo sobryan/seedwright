@@ -17,6 +17,14 @@ public class McpEndpointConfig {
 
     public static final String MCP_ENDPOINT = "/mcp";
 
+    /** Drop-in JDBC driver jars for unspecified dialects (DB2 jcc, Oracle ojdbc, ...). */
+    @Bean
+    public DriverDirectoryLoader driverDirectoryLoader(
+            @org.springframework.beans.factory.annotation.Value(
+                    "${seedwright.driver-dir:./drivers}") String driverDir) {
+        return new DriverDirectoryLoader(java.nio.file.Path.of(driverDir));
+    }
+
     @Bean
     public McpJsonMapper mcpJsonMapper(ObjectMapper objectMapper) {
         return new JacksonMcpJsonMapper(objectMapper);

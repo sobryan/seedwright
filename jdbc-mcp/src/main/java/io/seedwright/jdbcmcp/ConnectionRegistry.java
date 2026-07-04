@@ -29,7 +29,9 @@ public class ConnectionRegistry {
 
     private final ConnectionsProperties properties;
 
-    public ConnectionRegistry(ConnectionsProperties properties) {
+    /** Depends on the driver loader so dropped-in jars are registered before any connect. */
+    public ConnectionRegistry(ConnectionsProperties properties,
+                              DriverDirectoryLoader driverLoader) {
         this.properties = properties;
     }
 

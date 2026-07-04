@@ -148,6 +148,16 @@ class HeuristicProvider:
             return {"kind": "faker", "params": {"method": "uuid4"}}
         if kind is TypeKind.JSON:
             return {"kind": "faker", "params": {"method": "json"}}
+        if kind is TypeKind.DATE:
+            # fixed default window — deterministic (no wall-clock), rule bounds win when given
+            d_low = rule.min_value if rule and rule.min_value else "2020-01-01"
+            d_high = rule.max_value if rule and rule.max_value else "2025-12-31"
+            return {"kind": "date_range", "params": {"low": d_low, "high": d_high}}
+        if kind is TypeKind.TIMESTAMP:
+            t_low = rule.min_value if rule and rule.min_value else "2020-01-01T00:00:00"
+            t_high = rule.max_value if rule and rule.max_value else "2025-12-31T23:59:59"
+            return {"kind": "timestamp_range",
+                    "params": {"low": t_low, "high": t_high, "tz": col.type.tz}}
         raise UnsupportedColumnError(
             f"{table.name}.{col.name}: canonical kind {kind.name} has no MVP generator yet"
         )

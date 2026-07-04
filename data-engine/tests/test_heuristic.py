@@ -90,3 +90,19 @@ def test_compiles_and_declares_capabilities() -> None:
     assert provider.capabilities().structured_json_output is True
     imported = ImportedSchema.from_sql_columns(IMPORTED, primary_keys=PKS)
     compile_to_genlib(parse_genspec(provider.propose(_request()).genspec), imported)
+
+
+def test_temporal_columns_supported_end_to_end() -> None:
+    imported_sql = {
+        "events": [("id", "bigint"), ("day", "date"),
+                   ("at", "timestamp with time zone"), ("logged", "timestamp")],
+    }
+    imported = ImportedSchema.from_sql_columns(imported_sql, primary_keys={"events": ["id"]})
+    provider = HeuristicProvider(volumes={"events": 20}, seed=3)
+    artifacts = author(imported, RuleSet(()), provider)
+    assert artifacts.provenance.determinism_gate_passed
+    tables = {t["name"]: t for t in artifacts.genspec["tables"]}
+    by_col = {c["name"]: c["generator"] for c in tables["events"]["columns"]}
+    assert by_col["day"]["kind"] == "date_range"
+    assert by_col["at"]["kind"] == "timestamp_range" and by_col["at"]["params"]["tz"] is True
+    assert by_col["logged"]["params"]["tz"] is False

@@ -93,6 +93,30 @@ validation passed). Notably the artifact hash matched the heuristic's (`ga_16aee
 Copilot converged on the identical canonical genspec, independently confirming that execution is
 provider-independent (the §3 keystone).
 
+## Slice 11 — temporal generators + DB2 dialect + drop-in driver jars
+
+**11A (the biggest real-schema gap, closed):** `DateRange` + `TimestampRange` in genlib —
+seeded, chunk-invariant, tz-aware (naive vs UTC per the column, FR-M.4) — wired through the
+authoring catalog with static param validation (ISO parse, `RANGE_INVALID`, and `TZ_MISMATCH`
+mirroring money's `SCALE_MISMATCH`), the heuristic provider (fixed deterministic default
+windows — no wall-clock; rule bounds win), and the Copilot prompt catalog. `NO_MVP_GENERATOR`
+no longer fires for DATE/TIMESTAMP. genlib 99, authoring 78, data-engine 31. UI demo schema now
+carries `signed_up date` + `created_at timestamptz`.
+
+**11B (dialects):** `Dialect` resolver (Postgres | H2 | **DB2** | ANSI fallback) with the
+divergences as data: DB2's footguns handled — BOOLEAN→`SMALLINT` 0/1, no tz timestamp
+(values normalized to UTC wall time by the binder), `VARCHAR` 32672 cap → `CLOB`,
+`BLOB`/`CHAR(36)`. **Teardown rewritten to be portable by construction** (DB2 LUW has no
+`DROP SCHEMA … CASCADE`): tables enumerated via JDBC metadata, dropped individually — each
+schema-qualified into the validated `ds_` namespace — then `DROP SCHEMA RESTRICT`; existence
+checks via metadata (no information_schema assumption). **Unspecified dialects:** a
+`DriverDirectoryLoader` scans `./drivers` for vendor jars, registers each `java.sql.Driver`
+behind a DriverManager shim — DB2 = drop `jcc.jar` in + a named connection; anything else the
+same, landing on the conservative ANSI mappings. Proven with a fake vendor driver jar compiled
+at test time (a class genuinely absent from the classpath — the parent-first classloading trap
+made the "copy the H2 jar" version of that test a false test, caught and replaced). jdbc-mcp
+35/35; README documents the dialect matrix + DB2 recipe.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the
