@@ -25,12 +25,13 @@ from seedwright_genlib.parquet import write_dataset
 from seedwright_genlib.rng import SeededRng
 from seedwright_pgloader.safesql import validate_relname
 
+from .anthropic_provider import AnthropicProvider
 from .copilot_provider import CopilotCliProvider
 from .heuristic import HeuristicProvider
 
 LOAD_PLAN_FILENAME = "load_plan.json"
 
-PROVIDERS = ("heuristic", "copilot-cli")
+PROVIDERS = ("heuristic", "copilot-cli", "anthropic")
 
 
 class UnknownProviderError(ValueError):
@@ -55,18 +56,23 @@ def run_author(
     seed: int = 42,
     max_iters: int = 4,
     provider: str = "heuristic",
-    _copilot_runner: Any = None,  # test seam: injected in tests, None in production
+    _copilot_runner: Any = None,    # test seam: injected in tests, None in production
+    _anthropic_runner: Any = None,  # test seam: injected in tests, None in production
 ) -> dict[str, Any]:
     """Author Generator Artifacts via the evaluator-optimizer loop.
 
-    ``provider``: 'heuristic' (deterministic, no LLM — the default) or 'copilot-cli' (the
-    GitHub Copilot CLI as the authoring model; requires an authenticated ``copilot``).
+    ``provider``: 'heuristic' (deterministic, no LLM — the default), 'copilot-cli' (the GitHub
+    Copilot CLI as the authoring model; requires an authenticated ``copilot``), or 'anthropic'
+    (the Anthropic Messages API; requires ``ANTHROPIC_API_KEY``).
     """
     if provider == "heuristic":
         chosen: Any = HeuristicProvider(foreign_keys=foreign_keys, volumes=volumes, seed=seed)
     elif provider == "copilot-cli":
         chosen = CopilotCliProvider(foreign_keys=foreign_keys, volumes=volumes, seed=seed,
                                     runner=_copilot_runner)
+    elif provider == "anthropic":
+        chosen = AnthropicProvider(foreign_keys=foreign_keys, volumes=volumes, seed=seed,
+                                   runner=_anthropic_runner)
     else:
         raise UnknownProviderError(
             f"unknown authoring provider {provider!r}; available: {list(PROVIDERS)}")

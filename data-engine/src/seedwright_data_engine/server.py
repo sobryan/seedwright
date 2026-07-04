@@ -41,8 +41,9 @@ def create_server() -> FastMCP:
     ) -> dict[str, Any]:
         """Author Generator Artifacts (evaluator-optimizer).
 
-        provider: 'heuristic' (deterministic, no LLM) or 'copilot-cli' (GitHub Copilot CLI
-        as the authoring model — requires an authenticated `copilot` on this host).
+        provider: 'heuristic' (deterministic, no LLM), 'copilot-cli' (GitHub Copilot CLI as the
+        authoring model — requires an authenticated `copilot`), or 'anthropic' (the Anthropic
+        Messages API — requires ANTHROPIC_API_KEY). Execution is model-free regardless (§3).
         """
         return run_author(schema=schema, rules=rules or [], foreign_keys=foreign_keys,
                           volumes=volumes, seed=seed, max_iters=max_iters, provider=provider)

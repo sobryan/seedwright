@@ -341,6 +341,7 @@ export default function Home() {
                   style={{ padding: "0.45rem", borderRadius: 6, marginBottom: "0.6rem" }}>
             <option value="heuristic">heuristic — deterministic, no LLM</option>
             <option value="copilot-cli">copilot-cli — GitHub Copilot authors the generator</option>
+            <option value="anthropic">anthropic — Claude authors the generator (needs ANTHROPIC_API_KEY)</option>
           </select>
           <label>schema (tables → columns + primary_key)</label>
           <textarea rows={10} value={schema} onChange={(e) => setSchema(e.target.value)} />

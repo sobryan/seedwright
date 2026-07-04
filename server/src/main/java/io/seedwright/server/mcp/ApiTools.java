@@ -91,8 +91,9 @@ public class ApiTools {
                                 + "references_table, references_column, min_per_parent, "
                                 + "max_per_parent}]}; rules = [{table, column, enum|min_value|"
                                 + "max_value}]; volumes = {table: row_count}; provider = "
-                                + "'heuristic' (default, no LLM) or 'copilot-cli' (GitHub "
-                                + "Copilot CLI authors the generator).",
+                                + "'heuristic' (default, no LLM), 'copilot-cli' (GitHub Copilot "
+                                + "CLI authors the generator), or 'anthropic' (Claude authors it, "
+                                + "needs ANTHROPIC_API_KEY).",
                         Map.of("type", "object",
                                 "properties", Map.of(
                                         "name", Map.of("type", "string"),

@@ -12,8 +12,13 @@ on one host with **no build tools and no separate database** — H2 file-mode me
 
 That's it. Maven, Node, and npm are **build-host only** — you don't need them here.
 
-Optional: GitHub Copilot CLI (`copilot`, authenticated) to use `provider=copilot-cli` as the
-authoring LLM. The default `heuristic` provider needs no model and no API key.
+Optional authoring models (the default `heuristic` provider needs neither):
+- `provider=copilot-cli` — GitHub Copilot CLI (`copilot`, authenticated) as the authoring LLM.
+- `provider=anthropic` — the Anthropic API; set `ANTHROPIC_API_KEY` in the environment before
+  `./bin/seedwright start` (the server passes it through to the generation engine).
+
+Whichever model authors the generator, **execution is identical and model-free** — the same
+seed always yields byte-identical data.
 
 ## Run
 

@@ -224,6 +224,32 @@ Python profiler read the Parquet, saw the 58184..940021 spread, and proposed exa
 `value_range`; `PUT /rules` adopted it and cleared `artifactsVersion` (re-author forced). A
 ruled column and the `id` column were correctly left un-suggested.
 
+## Slice 16 — a second real provider (Anthropic): proving NFR-AGNOSTIC
+
+The Copilot CLI provider showed one real backend worked; a second, structurally different one
+proves the abstraction is real rather than incidental. `AnthropicProvider` (data-engine) sits
+behind the same authoring `Provider` protocol and — crucially — **reuses `build_prompt` and
+`extract_genspec` verbatim** from the Copilot provider. Only the *transport* differs: an HTTP
+POST to the Anthropic Messages API (stdlib `urllib`, no SDK dependency) instead of shelling out
+to a CLI. That the prompt and extraction are shared is the point: provider-agnosticism lives at
+authoring, and everything downstream (compile → generate → validate → load) is untouched.
+
+**Testable offline by construction:** the network call sits behind an injectable `runner` (the
+same seam the Copilot provider uses). `build_request` (URL + headers + body) and `parse_reply`
+(assistant text out of the Messages envelope, `""` on any malformed/blocked shape) are pure and
+unit-tested; a blocked reply becomes an empty genspec → PARSE_ERROR the loop refines on, never a
+crash (FR-H.7). 6 new tests, all offline — no key, no network. The real HTTP path is deliberately
+not exercised in CI: calling it would send schema/rules to an external service and cost money, so
+it stays behind the key + explicit provider selection (NFR-PRIV: privacy is the provider choice).
+
+**Threaded through the stack:** `PROVIDERS` now `(heuristic, copilot-cli, anthropic)`; `run_author`
+gains an `anthropic` branch (+ an `_anthropic_runner` test seam); the data-engine tool doc, the
+product-MCP `create_blueprint` description, and the UI provider select all list it. One real
+integration fix the design forced: the server spawns the data-engine over stdio MCP, and the SDK
+passed only a filtered child env — so `ANTHROPIC_API_KEY` wouldn't reach the engine. The spawn now
+inherits the operator's full environment (`.env(System.getenv())`), the on-prem-correct behavior
+for a tool configured by env vars. data-engine 47, server 13.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

@@ -130,8 +130,12 @@ public class McpDataEngine implements DataEngine, AutoCloseable {
 
     private McpSyncClient ensureClient() {
         if (client == null) {
+            // Inherit the operator's environment so provider credentials configured on the
+            // server host (e.g. ANTHROPIC_API_KEY) reach the spawned data-engine — the SDK
+            // otherwise passes only a filtered default env.
             ServerParameters params = ServerParameters.builder(properties.command())
                     .args(properties.args())
+                    .env(new java.util.HashMap<>(System.getenv()))
                     .build();
             StdioClientTransport transport =
                     new StdioClientTransport(params, new JacksonMcpJsonMapper(objectMapper));
