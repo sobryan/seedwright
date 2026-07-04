@@ -70,4 +70,20 @@ public class FakeDataEngine implements DataEngine {
                                              List<String> formats) {
         return Map.of("out_dir", outDir, "files", Map.of(), "total_rows", 40);
     }
+
+    @Override
+    public Map<String, Object> suggestRules(String canonicalDir, Map<String, Object> loadPlan,
+                                            List<Map<String, Object>> existingRules) {
+        // one deterministic suggestion the tests can assert on (skipped if already ruled)
+        boolean tierRuled = existingRules.stream()
+                .anyMatch(r -> "customers".equals(r.get("table")) && "tier".equals(r.get("column")));
+        if (tierRuled) {
+            return Map.of("suggestions", List.of());
+        }
+        return Map.of("suggestions", List.of(Map.of(
+                "table", "customers", "column", "tier", "kind", "enum",
+                "reason", "only 2 distinct values across 40 rows",
+                "rule", Map.of("table", "customers", "column", "tier",
+                        "enum", List.of("free", "pro")))));
+    }
 }

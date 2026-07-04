@@ -17,6 +17,7 @@ from .engine import (
     run_load_postgres,
     run_preview,
     run_read_rows,
+    run_suggest_rules,
     run_teardown_postgres,
     run_validate,
 )
@@ -67,6 +68,14 @@ def create_server() -> FastMCP:
     ) -> dict[str, Any]:
         """Read a page of rows from a generated Dataset's canonical Parquet."""
         return run_read_rows(canonical_dir=canonical_dir, table=table, offset=offset, limit=limit)
+
+    @mcp.tool()
+    def suggest_rules(
+        canonical_dir: str, load_plan: dict[str, Any], existing_rules: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Profile a generated Dataset and propose tightening rules to refine the Blueprint."""
+        return run_suggest_rules(canonical_dir=canonical_dir, load_plan=load_plan,
+                                 existing_rules=existing_rules)
 
     @mcp.tool()
     def validate_dataset(

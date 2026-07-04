@@ -201,6 +201,57 @@ public class ApiTools {
                                     args.get("limit") instanceof Number l ? l.intValue() : 50);
                         }),
 
+                spec("suggest_rules",
+                        "Profile a generated Dataset and propose rules that would tighten the "
+                                + "Blueprint (low-cardinality columns -> enum, numeric spread -> "
+                                + "range, observed nulls -> null-rate). Feed chosen suggestions "
+                                + "to update_blueprint_rules, then regenerate to refine (FR-D).",
+                        Map.of("type", "object",
+                                "properties", Map.of("dataset_id", Map.of("type", "string")),
+                                "required", List.of("dataset_id")),
+                        args -> {
+                            DatasetEntity dataset = datasets
+                                    .findById((String) args.get("dataset_id"))
+                                    .orElseThrow(() -> new IllegalArgumentException("no such dataset"));
+                            if (dataset.getCanonicalDir() == null || dataset.getLoadPlanJson() == null) {
+                                throw new IllegalStateException("dataset has no canonical data yet");
+                            }
+                            List<Map<String, Object>> existing = blueprints
+                                    .findById(dataset.getBlueprintId())
+                                    .map(bp -> bp.getRulesJson() == null
+                                            ? List.<Map<String, Object>>of() : readList(bp.getRulesJson()))
+                                    .orElse(List.of());
+                            return engine.suggestRules(dataset.getCanonicalDir(),
+                                    read(dataset.getLoadPlanJson()), existing);
+                        }),
+
+                spec("update_blueprint_rules",
+                        "Replace a Blueprint's rules to refine it (FR-D). This invalidates the "
+                                + "cached generator artifacts and any approval — the next "
+                                + "generate_dataset re-authors against the new rules. Existing "
+                                + "Datasets are untouched.",
+                        Map.of("type", "object",
+                                "properties", Map.of(
+                                        "blueprint_id", Map.of("type", "string"),
+                                        "rules", Map.of("type", "array",
+                                                "items", Map.of("type", "object"))),
+                                "required", List.of("blueprint_id", "rules")),
+                        args -> {
+                            BlueprintEntity bp = blueprints
+                                    .findById((String) args.get("blueprint_id"))
+                                    .orElseThrow(() -> new IllegalArgumentException("no such blueprint"));
+                            bp.setRulesJson(writeJson(args.get("rules")));
+                            bp.setArtifactsJson(null);
+                            bp.setArtifactsVersion(null);
+                            bp.setArtifactsApproval(null);
+                            bp.setArtifactsApprovedBy(null);
+                            bp.setArtifactsApprovedAt(null);
+                            bp.setUpdatedAt(java.time.Instant.now());
+                            blueprints.save(bp);
+                            return Map.of("id", bp.getId(), "rulesUpdated", true,
+                                    "artifactsCleared", true);
+                        }),
+
                 spec("generate_dataset",
                         "Generate a Dataset from a Blueprint (authoring + deterministic "
                                 + "generation + validation). Waits up to wait_seconds (default 120) "
@@ -412,6 +463,24 @@ public class ApiTools {
             return json.readValue(text, MAP);
         } catch (Exception e) {
             throw new IllegalStateException("corrupt JSON aggregate", e);
+        }
+    }
+
+    private static final TypeReference<List<Map<String, Object>>> LIST = new TypeReference<>() {};
+
+    private List<Map<String, Object>> readList(String text) {
+        try {
+            return json.readValue(text, LIST);
+        } catch (Exception e) {
+            throw new IllegalStateException("corrupt JSON aggregate", e);
+        }
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("cannot serialize", e);
         }
     }
 

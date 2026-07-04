@@ -36,4 +36,9 @@ public interface DataEngine {
                                        int rowsPerTable);
 
     Map<String, Object> readRows(String canonicalDir, String table, int offset, int limit);
+
+    /** Profile a generated Dataset and propose tightening rules to refine the Blueprint (FR-D). */
+    Map<String, Object> suggestRules(String canonicalDir,
+                                     Map<String, Object> loadPlan,
+                                     List<Map<String, Object>> existingRules);
 }

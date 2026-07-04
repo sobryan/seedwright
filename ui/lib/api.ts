@@ -26,6 +26,15 @@ export interface Blueprint {
   artifactsApproval?: string;
   artifactsApprovedBy?: string;
   schema: Record<string, unknown>;
+  rules?: Record<string, unknown>[];
+}
+
+export interface Suggestion {
+  table: string;
+  column: string;
+  kind: string;
+  reason: string;
+  rule: Record<string, unknown>;
 }
 
 export interface Artifacts {
@@ -96,6 +105,15 @@ export const api = {
     request<{ total_rows: number; rows: Record<string, unknown>[] }>(
       `/api/datasets/${datasetId}/rows?table=${encodeURIComponent(table)}&offset=${offset}&limit=${limit}`,
     ),
+  suggestions: (datasetId: string) =>
+    request<{ suggestions: { table: string; column: string; kind: string; reason: string; rule: Record<string, unknown> }[] }>(
+      `/api/datasets/${datasetId}/suggestions`,
+    ),
+  updateRules: (blueprintId: string, rules: Record<string, unknown>[]) =>
+    request<Blueprint>(`/api/blueprints/${blueprintId}/rules`, {
+      method: "PUT",
+      body: JSON.stringify({ rules }),
+    }),
   getArtifacts: (blueprintId: string) =>
     request<Artifacts>(`/api/blueprints/${blueprintId}/artifacts`),
   approveArtifacts: (blueprintId: string, approvedBy: string) =>

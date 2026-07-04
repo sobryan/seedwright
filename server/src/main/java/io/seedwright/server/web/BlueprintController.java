@@ -79,6 +79,32 @@ public class BlueprintController {
         return ResponseEntity.noContent().build();
     }
 
+    public record UpdateRulesRequest(@NotNull List<Map<String, Object>> rules) {}
+
+    /**
+     * Refine the Blueprint by replacing its rules (FR-D). Changing declared intent invalidates
+     * the cached Generator Artifacts, so they (and any approval) are cleared — the next
+     * generate/preview re-authors against the new rules. Datasets already generated are untouched.
+     */
+    @org.springframework.web.bind.annotation.PutMapping("/{id}/rules")
+    public ResponseEntity<Map<String, Object>> updateRules(
+            @PathVariable String id, @RequestBody @jakarta.validation.Valid UpdateRulesRequest request) {
+        return blueprints.findById(id)
+                .map(bp -> {
+                    bp.setRulesJson(write(request.rules()));
+                    // refinement invalidates authored artifacts + their approval (FR-L.5)
+                    bp.setArtifactsJson(null);
+                    bp.setArtifactsVersion(null);
+                    bp.setArtifactsApproval(null);
+                    bp.setArtifactsApprovedBy(null);
+                    bp.setArtifactsApprovedAt(null);
+                    bp.setUpdatedAt(Instant.now());
+                    blueprints.save(bp);
+                    return ResponseEntity.ok(toDto(bp));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     /** The authored Generator Artifacts — what a human reviews before approving (FR-L.5). */
     @GetMapping("/{id}/artifacts")
     public ResponseEntity<Map<String, Object>> artifacts(@PathVariable String id) {
@@ -188,6 +214,14 @@ public class BlueprintController {
             return json.readValue(jsonText, new TypeReference<Object>() {});
         } catch (Exception e) {
             throw new IllegalStateException("corrupt JSON aggregate", e);
+        }
+    }
+
+    private String write(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("cannot serialize", e);
         }
     }
 }

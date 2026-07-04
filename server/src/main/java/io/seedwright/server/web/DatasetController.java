@@ -21,13 +21,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class DatasetController {
 
     private final DatasetRepository datasets;
+    private final io.seedwright.server.domain.BlueprintRepository blueprints;
     private final DataEngine engine;
     private final io.seedwright.server.jobs.JobManager jobManager;
     private final ObjectMapper json;
 
-    public DatasetController(DatasetRepository datasets, DataEngine engine,
+    public DatasetController(DatasetRepository datasets,
+                             io.seedwright.server.domain.BlueprintRepository blueprints,
+                             DataEngine engine,
                              io.seedwright.server.jobs.JobManager jobManager, ObjectMapper json) {
         this.datasets = datasets;
+        this.blueprints = blueprints;
         this.engine = engine;
         this.jobManager = jobManager;
         this.json = json;
@@ -64,6 +68,36 @@ public class DatasetController {
                                  "status", dataset.getStatus()));
         }
         return ResponseEntity.ok(engine.readRows(dataset.getCanonicalDir(), table, offset, limit));
+    }
+
+    /** Refinement suggestions (FR-D): profile this Dataset → rules that tighten the Blueprint. */
+    @GetMapping("/datasets/{id}/suggestions")
+    public ResponseEntity<Map<String, Object>> suggestions(@PathVariable String id) {
+        DatasetEntity dataset = datasets.findById(id).orElse(null);
+        if (dataset == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (dataset.getCanonicalDir() == null || dataset.getLoadPlanJson() == null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "dataset has no canonical data yet",
+                                 "status", dataset.getStatus()));
+        }
+        List<Map<String, Object>> existingRules = blueprints.findById(dataset.getBlueprintId())
+                .map(bp -> bp.getRulesJson() == null
+                        ? List.<Map<String, Object>>of()
+                        : this.<List<Map<String, Object>>>readJson(bp.getRulesJson()))
+                .orElse(List.of());
+        return ResponseEntity.ok(engine.suggestRules(
+                dataset.getCanonicalDir(), parse(dataset.getLoadPlanJson()), existingRules));
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T readJson(String jsonText) {
+        try {
+            return (T) json.readValue(jsonText, new TypeReference<Object>() {});
+        } catch (Exception e) {
+            throw new IllegalStateException("corrupt JSON", e);
+        }
     }
 
     public record ExportRequest(List<String> formats) {}

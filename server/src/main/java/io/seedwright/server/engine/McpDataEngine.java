@@ -99,6 +99,14 @@ public class McpDataEngine implements DataEngine, AutoCloseable {
                 "offset", offset, "limit", limit));
     }
 
+    @Override
+    public Map<String, Object> suggestRules(String canonicalDir, Map<String, Object> loadPlan,
+                                            List<Map<String, Object>> existingRules) {
+        return call("suggest_rules", Map.of(
+                "canonical_dir", canonicalDir, "load_plan", loadPlan,
+                "existing_rules", existingRules));
+    }
+
     @SuppressWarnings("unchecked")
     private synchronized Map<String, Object> call(String tool, Map<String, Object> args) {
         CallToolResult result = ensureClient().callTool(new CallToolRequest(tool, args));

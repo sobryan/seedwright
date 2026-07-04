@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, Blueprint, Dataset } from "@/lib/api";
+import { api, Blueprint, Dataset, Suggestion } from "@/lib/api";
 
 const DEMO_SCHEMA = JSON.stringify(
   {
@@ -68,6 +68,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [previews, setPreviews] = useState<Record<string, Record<string, Record<string, unknown>[]>>>({});
+  // refinement (FR-D): suggestions keyed by dataset id, and the ones the user has checked
+  const [suggestions, setSuggestions] = useState<Record<string, Suggestion[]>>({});
+  const [chosen, setChosen] = useState<Record<string, Set<number>>>({});
   const [browser, setBrowser] = useState<{
     datasetId: string;
     table: string;
@@ -212,6 +215,49 @@ export default function Home() {
     setBusy(datasetId);
     try {
       const { jobId } = await api.materialize(datasetId, sink);
+      pollJob(jobId);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function loadSuggestions(datasetId: string) {
+    setBusy(datasetId);
+    try {
+      const { suggestions: list } = await api.suggestions(datasetId);
+      setSuggestions((s) => ({ ...s, [datasetId]: list }));
+      // pre-check everything — the common case is "yes, tighten all of these"
+      setChosen((c) => ({ ...c, [datasetId]: new Set(list.map((_, i) => i)) }));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function toggleSuggestion(datasetId: string, i: number) {
+    setChosen((c) => {
+      const next = new Set(c[datasetId] ?? []);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return { ...c, [datasetId]: next };
+    });
+  }
+
+  // FR-D: adopt the checked suggestions into the blueprint's rules, then regenerate.
+  async function applySuggestions(bp: Blueprint, datasetId: string) {
+    const list = suggestions[datasetId] ?? [];
+    const picked = list.filter((_, i) => (chosen[datasetId] ?? new Set()).has(i));
+    if (picked.length === 0) return;
+    setBusy(datasetId);
+    try {
+      // suggestions only ever cover columns without a rule, so existing + picked never conflict
+      const merged = [...(bp.rules ?? []), ...picked.map((s) => s.rule)];
+      await api.updateRules(bp.id, merged);
+      setSuggestions((s) => ({ ...s, [datasetId]: [] }));
+      const { jobId } = await api.triggerGeneration(bp.id); // re-authors against the new rules
       pollJob(jobId);
     } catch (e) {
       setError(String(e));
@@ -418,10 +464,41 @@ export default function Home() {
                   >
                     export files
                   </button>
+                  <button className="secondary" onClick={() => loadSuggestions(ds.id)}
+                          disabled={busy === ds.id} title="profile this data and suggest tighter rules">
+                    refine
+                  </button>
                 </span>
               )}
             </div>
           ))}
+          {(datasets[bp.id] ?? []).map((ds) =>
+            (suggestions[ds.id]?.length ?? 0) > 0 ? (
+              <div className="card" key={ds.id + "-sug"}
+                   style={{ marginTop: "0.4rem", background: "#0d1117" }}>
+                <div className="muted" style={{ marginBottom: "0.4rem" }}>
+                  refinement suggestions from {ds.namespace} — adopt into the blueprint&apos;s rules
+                  and regenerate (FR-D)
+                </div>
+                {suggestions[ds.id].map((s, i) => (
+                  <label key={i} className="row" style={{ gap: "0.5rem", marginBottom: "0.25rem" }}>
+                    <input type="checkbox"
+                           checked={(chosen[ds.id] ?? new Set()).has(i)}
+                           onChange={() => toggleSuggestion(ds.id, i)} />
+                    <code>{s.table}.{s.column}</code>
+                    <span className="badge">{s.kind}</span>
+                    <span className="muted" style={{ fontSize: "0.78rem" }}>
+                      {s.reason} → {JSON.stringify(s.rule)}
+                    </span>
+                  </label>
+                ))}
+                <button onClick={() => applySuggestions(bp, ds.id)} disabled={busy === ds.id}
+                        style={{ marginTop: "0.4rem" }}>
+                  apply &amp; regenerate
+                </button>
+              </div>
+            ) : null,
+          )}
           {(datasets[bp.id] ?? []).flatMap((ds) =>
             (ds.materializations ?? []).map((m, i) => (
               <div className="row spread" key={ds.id + i} style={{ marginTop: "0.4rem" }}>

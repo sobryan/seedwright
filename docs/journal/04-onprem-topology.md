@@ -195,6 +195,35 @@ parsing grabbed the Spring parent's `3.5.3` instead of the project's `0.0.1` (no
 **Deferred:** a fully air-gapped bundle (vendored wheels so first start needs no network) —
 today the first `uv sync` fetches Python deps.
 
+## Slice 15 — the refinement loop (FR-D): profile → suggest → apply → regenerate
+
+In a system where rules *drive* generation, a full-dataset validation failure is rare (data
+satisfies the rules by construction), so the valuable refinement loop is **inspection-driven**:
+profile the data you just generated and propose rules that TIGHTEN the Blueprint.
+
+**The profiler** (`run_suggest_rules`, data-engine): reads a Dataset's canonical Parquet and
+proposes ColumnRule patches — low-cardinality STRING columns → `enum`, numeric spread →
+`value_range` (money-safe string bounds), observed nulls → `max_null_rate` (rounded up so it
+never sits below what was seen). Skips identifier columns (`id`, `*_id`) and any column that
+already carries a rule, so suggestions are disjoint from existing intent and never conflict.
+Each suggestion's `rule` is directly appendable to the Blueprint. 5 unit tests on a hand-built
+fixture pin the exact proposals.
+
+**The apply mechanic** (`PUT /api/blueprints/{id}/rules`): replacing rules invalidates the
+cached Generator Artifacts AND their approval (nulls both) — the next generate re-authors
+against the new intent (FR-L.5 approval must be re-earned). Already-generated Datasets are
+untouched.
+
+**Surfaced everywhere:** REST (`GET /datasets/{id}/suggestions`, `PUT /blueprints/{id}/rules`),
+product MCP (`suggest_rules`, `update_blueprint_rules` — the tool copy tells the agent adopting
+suggestions invalidates approval), and the UI (a "refine" button on any ready dataset → a
+checklist of suggestions with their reasons → "apply & regenerate"). data-engine 41, server 13.
+
+**Proven live through real MCP:** generated 30 customers with an unruled `score` column; the
+Python profiler read the Parquet, saw the 58184..940021 spread, and proposed exactly that
+`value_range`; `PUT /rules` adopted it and cleared `artifactsVersion` (re-author forced). A
+ruled column and the `id` column were correctly left un-suggested.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

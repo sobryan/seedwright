@@ -84,7 +84,8 @@ class ProductMcpEndpointTest {
         assertThat(names).contains(
                 "list_connections", "introspect_connection", "list_blueprints",
                 "create_blueprint", "generate_dataset", "get_job", "list_datasets",
-                "get_dataset", "export_dataset", "get_artifacts", "approve_artifacts", "materialize_dataset", "teardown_dataset");
+                "get_dataset", "export_dataset", "get_artifacts", "approve_artifacts",
+                "suggest_rules", "update_blueprint_rules", "materialize_dataset", "teardown_dataset");
     }
 
     @Test

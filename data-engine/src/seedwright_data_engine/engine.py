@@ -194,6 +194,82 @@ def run_read_rows(
     }
 
 
+# Profiling thresholds for refinement suggestions (FR-D). Deliberately conservative — a
+# suggestion should feel obviously right, not noisy.
+_ENUM_MAX_DISTINCT = 12          # more distinct values than this isn't a categorical
+_NUMERIC_KINDS = {"INT16", "INT32", "INT64", "DECIMAL", "FLOAT32", "FLOAT64"}
+
+
+def _is_identifier(column: str) -> bool:
+    """PK/FK-style columns are identifiers, not domain values — never suggest rules for them."""
+    return column == "id" or column.endswith("_id")
+
+
+def run_suggest_rules(
+    *,
+    canonical_dir: str,
+    load_plan: dict[str, Any],
+    existing_rules: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Profile a generated Dataset's canonical Parquet and propose tightening rules (FR-D).
+
+    Each suggestion's ``rule`` is a ColumnRule dict, directly appendable to a Blueprint's rules.
+    Columns that already carry a rule, and identifier (PK/FK) columns, are left alone.
+    """
+    import math
+
+    ruled = {(r["table"], r["column"]) for r in existing_rules}
+    suggestions: list[dict[str, Any]] = []
+
+    for table in load_plan.get("tables", []):
+        tname = table["name"]
+        row_count = table.get("row_count", 0)
+        if row_count == 0:
+            continue
+        arrow = pq.read_table(Path(canonical_dir) / f"{validate_relname(tname)}.parquet")  # type: ignore[no-untyped-call]
+        kinds = {c["name"]: c.get("canonical_kind", "") for c in table["columns"]}
+        for col in table["columns"]:
+            cname = col["name"]
+            if (tname, cname) in ruled or _is_identifier(cname):
+                continue
+            values = arrow.column(cname).to_pylist()
+            non_null = [v for v in values if v is not None]
+            null_count = len(values) - len(non_null)
+            kind = kinds.get(cname, "")
+
+            # observed nulls -> propose a max_null_rate cap at (or just above) what we saw
+            if null_count > 0:
+                observed = null_count / len(values)
+                suggestions.append({
+                    "table": tname, "column": cname, "kind": "null_rate",
+                    "reason": f"{null_count} of {len(values)} rows null ({observed:.0%})",
+                    "rule": {"table": tname, "column": cname,
+                             "max_null_rate": round(math.ceil(observed * 20) / 20, 2)},
+                })
+
+            if not non_null:
+                continue
+            distinct = list(dict.fromkeys(non_null))  # preserve first-seen order, dedup
+            # low-cardinality (and not all-unique) -> categorical enum
+            if kind == "STRING" and 1 < len(distinct) <= _ENUM_MAX_DISTINCT \
+                    and len(distinct) < len(non_null):
+                suggestions.append({
+                    "table": tname, "column": cname, "kind": "enum",
+                    "reason": f"only {len(distinct)} distinct values across {row_count} rows",
+                    "rule": {"table": tname, "column": cname, "enum": distinct},
+                })
+            # numeric spread -> observed min/max range (money-safe: bounds as strings)
+            elif kind in _NUMERIC_KINDS and len(distinct) > 1:
+                suggestions.append({
+                    "table": tname, "column": cname, "kind": "value_range",
+                    "reason": f"observed {min(non_null)}..{max(non_null)}",
+                    "rule": {"table": tname, "column": cname,
+                             "min_value": str(min(non_null)), "max_value": str(max(non_null))},
+                })
+
+    return {"suggestions": suggestions}
+
+
 def run_load_postgres(
     *,
     canonical_dir: str,
