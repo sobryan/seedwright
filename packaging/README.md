@@ -11,10 +11,12 @@ Depends on which bundle you have:
 - **Online bundle** (`seedwright-<version>.tar.gz`): **Java 21+** and **uv**
   (https://docs.astral.sh/uv — a single static binary; provides Python 3.12 and the
   data-engine's dependencies on first start, then caches them).
-- **Air-gapped bundle** (`seedwright-<version>-offline-<platform>.tar.gz`): **Java 21+** and
-  **Python 3.12** (with `venv`). No uv, and **no network at all** — it ships a `wheelhouse/`
-  and builds the data-engine's virtualenv offline on first start. The bundle is
-  platform-specific (its wheels are built for one OS/arch); use the one matching this host.
+- **Air-gapped bundle** (`seedwright-<version>-offline-<platform>.tar.gz`): **nothing** — it
+  ships its own Java runtime (`runtime/java`) and Python 3.12 (`runtime/python`) alongside a
+  `wheelhouse/`, and builds the data-engine's virtualenv offline on first start. No uv, no
+  network, no host Java or Python required. It is platform-specific (runtimes + wheels are
+  built for one OS/arch); use the one matching this host. (If a bundle was built without the
+  runtimes, it falls back to a host Java 21 + Python 3.12.)
 
 Either way, Maven, Node, and npm are **build-host only** — you don't need them here.
 

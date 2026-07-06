@@ -10,8 +10,10 @@
 # Target prerequisites (NO build tools needed):
 #   Online bundle  — Java 21+  and  uv (https://docs.astral.sh/uv; provides Python 3.12 + the
 #                    data-engine's deps on first start, then caches them).
-#   Air-gapped bundle (ships a wheelhouse/) — Java 21+  and  Python 3.12 (with venv). NO uv,
-#                    NO network: the data-engine venv is built offline from the vendored wheels.
+#   Air-gapped bundle (ships a wheelhouse/) — NO uv, NO network. If the bundle also ships
+#                    runtime/java + runtime/python (built with --offline), it is fully turnkey:
+#                    NOTHING is required on the host. Otherwise it falls back to a host Java 21
+#                    + Python 3.12.
 #
 # Configure datastore targets in conf/jdbc-mcp.yml (credentials stay on this node).
 # Drop extra JDBC driver jars (DB2, Oracle, …) into ./drivers.
@@ -27,6 +29,14 @@ mkdir -p "$RUN_DIR" data drivers
 
 server_jar="$(echo lib/seedwright-server-*.jar)"
 jdbc_jar="$(echo lib/seedwright-jdbc-mcp-*.jar)"
+
+# Prefer runtimes bundled inside the tree (turnkey air-gap) over anything on the host.
+if [[ -x "$BUNDLE/runtime/java/bin/java" ]]; then
+  JAVA="$BUNDLE/runtime/java/bin/java"
+else
+  JAVA="java"
+fi
+BUNDLED_PYTHON="$BUNDLE/runtime/python/bin/python3.12"
 
 stop() {
   for name in server jdbc-mcp; do
@@ -78,11 +88,17 @@ find_python312() {
 }
 
 echo "==> checking prerequisites"
-command -v java >/dev/null || { echo "missing prerequisite: java 21+"; exit 1; }
+if [[ "$JAVA" == "java" ]]; then
+  command -v java >/dev/null || { echo "missing prerequisite: java 21+ (or use a --offline bundle with runtime/java)"; exit 1; }
+fi
 
 if [[ $OFFLINE -eq 1 ]]; then
-  PYTHON="$(find_python312 || true)"
-  [[ -n "$PYTHON" ]] || { echo "missing prerequisite: Python 3.12 (air-gapped bundle needs it)"; exit 1; }
+  if [[ -x "$BUNDLED_PYTHON" ]]; then
+    PYTHON="$BUNDLED_PYTHON"   # turnkey: interpreter ships in the bundle
+  else
+    PYTHON="$(find_python312 || true)"
+    [[ -n "$PYTHON" ]] || { echo "missing prerequisite: Python 3.12 (or use a bundle with runtime/python)"; exit 1; }
+  fi
   echo "==> preparing the Python data-engine (offline: venv from ./wheelhouse, no network)"
   if [[ ! -x "$BUNDLE/.venv-data-engine/bin/python" ]]; then
     "$PYTHON" -m venv "$BUNDLE/.venv-data-engine"
@@ -97,14 +113,14 @@ else
 fi
 
 echo "==> starting the JDBC loader node (port 8081)"
-nohup java -jar "$jdbc_jar" \
+nohup "$JAVA" -jar "$jdbc_jar" \
   --spring.config.additional-location="file:$BUNDLE/conf/jdbc-mcp.yml" \
   --seedwright.driver-dir="$BUNDLE/drivers" \
   > "$RUN_DIR/jdbc-mcp.log" 2>&1 &
 echo $! > "$RUN_DIR/jdbc-mcp.pid"
 
 echo "==> starting the central server (port $SERVER_PORT)"
-nohup java -jar "$server_jar" \
+nohup "$JAVA" -jar "$server_jar" \
   --spring.config.additional-location="file:$BUNDLE/conf/application.yml" \
   --server.port="$SERVER_PORT" \
   > "$RUN_DIR/server.log" 2>&1 &

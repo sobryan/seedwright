@@ -280,6 +280,32 @@ complete.
 interpreter present — bundling those (a JRE + a standalone CPython) is a further platform
 multiplier, deferred. Everything the *application* needs is now vendored.
 
+## Slice 18 — bundling the runtimes: the turnkey air-gapped bundle
+
+The air-gapped bundle still asked the host for a Java 21 and a Python 3.12. Slice 18 erases
+both: `./package.sh --offline` now vendors both runtimes, so the bundle needs **nothing** on
+the target but a compatible OS/arch.
+
+- **CPython**: uv's managed 3.12 is a python-build-standalone build — relocatable by design —
+  so it's copied wholesale to `runtime/python`. The offline first-start venv is built from it.
+- **Java**: a `jlink` slim image when the build JDK ships `jmods`; otherwise the build host's
+  runtime image is copied wholesale to `runtime/java` (a JRE/JBR is relocatable and runs the
+  Spring uberjars). On this build host (a JBR without jmods) it fell back to the copy path.
+
+The one launcher prefers in-bundle runtimes (`runtime/java/bin/java`,
+`runtime/python/bin/python3.12`) over anything on the host, falling back gracefully if a bundle
+was built without them.
+
+**Proven turnkey.** Extracted the bundle into a fresh dir and booted it with `PATH=/usr/bin:/bin`
+— **no uv, no python3.12, no real host Java on PATH**. The stack came up, `ps` confirmed the
+server JVM was the in-bundle `runtime/java`, the data-engine venv's interpreter symlinked to the
+in-bundle `runtime/python`, and a create→generate ran green (20 rows, enum rule honored,
+validation passed). The bundle grew 144M→224M (the vendored JDK image is the bulk; a jlink build
+host would shrink it). Platform-tagged as before, since runtimes + wheels are OS/arch-specific.
+
+The on-prem "simple shop" story is now complete: one tarball, one command, zero prerequisites,
+zero network.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

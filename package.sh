@@ -84,6 +84,36 @@ if [[ $OFFLINE -eq 1 ]]; then
     (cd "$ROOT/$proj" && uv build --wheel -o "$STAGE/wheelhouse" >/dev/null)
   done
   cp "$ROOT/packaging/conf/application-offline.yml" "$STAGE/conf/application.yml"
+
+  # --- bundle the runtimes so the air-gapped bundle needs NOTHING on the host ---
+  mkdir -p "$STAGE/runtime"
+
+  # CPython: uv's managed 3.12 is a python-build-standalone build (relocatable by design).
+  echo "==> bundling CPython 3.12 (runtime/python)"
+  uv python install 3.12 >/dev/null 2>&1 || true
+  pybase=""
+  for d in "$(uv python dir)"/cpython-3.12*-*; do
+    [[ -L "$d" ]] && continue   # skip the version alias symlink; keep the real install dir
+    pybase="$d"
+  done
+  [[ -n "$pybase" && -x "$pybase/bin/python3.12" ]] || { echo "could not locate a managed CPython 3.12"; exit 1; }
+  cp -R "$pybase" "$STAGE/runtime/python"
+
+  # Java: a jlink slim image when the build JDK ships jmods; otherwise copy the runtime image
+  # wholesale (a JRE/JBR is relocatable and runs the Spring jars). Same platform as the target.
+  echo "==> bundling the Java runtime (runtime/java)"
+  jhome="$(java -XshowSettings:properties -version 2>&1 | sed -n 's/.*java.home = //p' | head -1)"
+  [[ -n "$jhome" ]] || { echo "could not resolve java.home"; exit 1; }
+  if [[ -d "$jhome/jmods" && -x "$jhome/bin/jlink" ]]; then
+    "$jhome/bin/jlink" \
+      --add-modules java.se,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.charsets,jdk.localedata,jdk.zipfs,jdk.management,jdk.naming.dns,jdk.httpserver,jdk.security.auth,jdk.security.jgss,jdk.net \
+      --strip-debug --no-man-pages --no-header-files \
+      --output "$STAGE/runtime/java"
+  else
+    echo "    (no jmods in the build JDK — copying the runtime image wholesale)"
+    cp -R "$jhome" "$STAGE/runtime/java"
+    chmod +x "$STAGE/runtime/java/bin/java" 2>/dev/null || true
+  fi
 else
   # ONLINE: ship the Python projects as source (deps resolved by uv at the target — NOT a
   # pre-built venv, which hardcodes absolute paths + platform and wouldn't relocate). The
@@ -119,7 +149,7 @@ echo
 echo "built $TARBALL"
 du -h "$TARBALL" | cut -f1 | sed 's/^/  size: /'
 if [[ $OFFLINE -eq 1 ]]; then
-  echo "  target prereqs: Java 21 + Python 3.12 (NO network, NO uv)"
+  echo "  target prereqs: NONE — Java + Python runtimes bundled (NO network, NO uv). Platform: $PLATFORM"
 else
   echo "  target prereqs: Java 21 + uv"
 fi
