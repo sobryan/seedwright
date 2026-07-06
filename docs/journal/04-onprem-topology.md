@@ -250,6 +250,36 @@ passed only a filtered child env — so `ANTHROPIC_API_KEY` wouldn't reach the e
 inherits the operator's full environment (`.env(System.getenv())`), the on-prem-correct behavior
 for a tool configured by env vars. data-engine 47, server 13.
 
+## Slice 17 — the fully air-gapped bundle: zero network at the target
+
+The online bundle's one caveat was the first `uv sync` reaching the network for Python deps.
+`./package.sh --offline` closes it: a self-contained bundle that installs and runs with **no
+network and no uv** — only Java 21 + Python 3.12 on the target.
+
+**Mechanism.** Package time (build host, network OK) vendors a complete **wheelhouse**: the
+third-party runtime closure (from `uv export --no-dev`, downloaded for Python 3.12 via an
+ephemeral `uv run --with pip … pip download`) plus the four local projects built to wheels
+(`uv build`). First start on the target creates the data-engine venv with
+`pip install --no-index --find-links wheelhouse` — and `--no-index` is the guarantee: if any
+wheel were missing it would fail rather than reach out, so a successful install *is* proof the
+wheelhouse is complete. An offline `application.yml` points the data-engine command at the
+venv's own interpreter (`./.venv-data-engine/bin/python -m seedwright_data_engine.server`); the
+one launcher detects offline mode by the presence of `wheelhouse/` and swaps uv for the venv
+path. Wheels are platform+arch+pyver specific (pyarrow/numpy/psycopg ship binaries), so the
+tarball is tagged `…-offline-<os>-<arch>` and must be built on a host matching the target.
+
+**Proven, network-free.** Built the bundle, extracted it into a fresh dir, put a `python3.12`
+on PATH with **uv absent**, and ran the launcher: it built the venv offline from the wheelhouse
+and booted the whole stack (server + jdbc-mcp up), then a create→generate ran green (25 rows,
+validation passed) — the offline data-engine authoring + deterministic generation working with
+no network in the loop. Trimming dev deps (`--no-dev`) took the wheelhouse 50→38 wheels, the
+tarball 161M→144M; a re-verified `--no-index` install confirmed the runtime closure stayed
+complete.
+
+**Remaining prereqs (honest):** the target still needs a Java 21 runtime and a Python 3.12
+interpreter present — bundling those (a JRE + a standalone CPython) is a further platform
+multiplier, deferred. Everything the *application* needs is now vendored.
+
 ## Deferred (cloud phase / fast-follows)
 
 Central-server↔jdbc-mcp wiring for direct DB sinks end-to-end; UI static export baked into the

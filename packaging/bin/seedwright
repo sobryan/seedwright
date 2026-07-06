@@ -8,9 +8,10 @@
 #   seedwright status    show what's running
 #
 # Target prerequisites (NO build tools needed):
-#   - Java 21+            (java -version)
-#   - uv                  (https://docs.astral.sh/uv — provides Python 3.12 + deps for the
-#                          data-engine; first start resolves them, then they're cached)
+#   Online bundle  — Java 21+  and  uv (https://docs.astral.sh/uv; provides Python 3.12 + the
+#                    data-engine's deps on first start, then caches them).
+#   Air-gapped bundle (ships a wheelhouse/) — Java 21+  and  Python 3.12 (with venv). NO uv,
+#                    NO network: the data-engine venv is built offline from the vendored wheels.
 #
 # Configure datastore targets in conf/jdbc-mcp.yml (credentials stay on this node).
 # Drop extra JDBC driver jars (DB2, Oracle, …) into ./drivers.
@@ -62,12 +63,38 @@ case "${1:-start}" in
   *) echo "usage: seedwright [start|stop|status]"; exit 1 ;;
 esac
 
+# Air-gapped bundles ship a wheelhouse/ — presence of it selects the offline path.
+OFFLINE=0
+[[ -d "$BUNDLE/wheelhouse" ]] && OFFLINE=1
+
+# find a Python 3.12 interpreter (offline path only) — required by the data-engine's pin
+find_python312() {
+  for cand in python3.12 python3 python; do
+    if command -v "$cand" >/dev/null 2>&1 && "$cand" -c 'import sys; sys.exit(0 if sys.version_info[:2]==(3,12) else 1)' 2>/dev/null; then
+      echo "$cand"; return 0
+    fi
+  done
+  return 1
+}
+
 echo "==> checking prerequisites"
 command -v java >/dev/null || { echo "missing prerequisite: java 21+"; exit 1; }
-command -v uv   >/dev/null || { echo "missing prerequisite: uv (https://docs.astral.sh/uv)"; exit 1; }
 
-echo "==> preparing the Python data-engine (uv — first run resolves Python 3.12 + deps)"
-(cd "$BUNDLE/data-engine" && uv sync -q)
+if [[ $OFFLINE -eq 1 ]]; then
+  PYTHON="$(find_python312 || true)"
+  [[ -n "$PYTHON" ]] || { echo "missing prerequisite: Python 3.12 (air-gapped bundle needs it)"; exit 1; }
+  echo "==> preparing the Python data-engine (offline: venv from ./wheelhouse, no network)"
+  if [[ ! -x "$BUNDLE/.venv-data-engine/bin/python" ]]; then
+    "$PYTHON" -m venv "$BUNDLE/.venv-data-engine"
+    # --no-index guarantees air-gap: if a wheel is missing this fails rather than reaching out
+    "$BUNDLE/.venv-data-engine/bin/python" -m pip install --quiet --no-index \
+      --find-links "$BUNDLE/wheelhouse" seedwright-data-engine
+  fi
+else
+  command -v uv >/dev/null || { echo "missing prerequisite: uv (https://docs.astral.sh/uv)"; exit 1; }
+  echo "==> preparing the Python data-engine (uv — first run resolves Python 3.12 + deps)"
+  (cd "$BUNDLE/data-engine" && uv sync -q)
+fi
 
 echo "==> starting the JDBC loader node (port 8081)"
 nohup java -jar "$jdbc_jar" \

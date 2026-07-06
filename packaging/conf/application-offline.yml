@@ -1,0 +1,23 @@
+# seedwright AIR-GAPPED bundle overrides (ADR-0004). Same as the online overrides, except the
+# data-engine is spawned from a venv built OFFLINE from the vendored wheelhouse (no uv, no
+# network) — bin/seedwright creates ./.venv-data-engine on first start via
+# `pip install --no-index --find-links wheelhouse`.
+
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/seedwright;DB_CLOSE_ON_EXIT=FALSE
+  web:
+    resources:
+      static-locations: file:./ui/
+
+seedwright:
+  work-dir: ./data/datasets
+  data-engine:
+    # the offline venv's interpreter, running the engine module over stdio
+    command: ./.venv-data-engine/bin/python
+    args:
+      - -m
+      - seedwright_data_engine.server
+    request-timeout: PT30M
+  jdbc-mcp:
+    url: http://127.0.0.1:8081

@@ -6,11 +6,17 @@ on one host with **no build tools and no separate database** — H2 file-mode me
 
 ## Prerequisites
 
-- **Java 21+** — `java -version`
-- **uv** — https://docs.astral.sh/uv (a single static binary; provides Python 3.12 and the
-  data-engine's dependencies on first start, then caches them)
+Depends on which bundle you have:
 
-That's it. Maven, Node, and npm are **build-host only** — you don't need them here.
+- **Online bundle** (`seedwright-<version>.tar.gz`): **Java 21+** and **uv**
+  (https://docs.astral.sh/uv — a single static binary; provides Python 3.12 and the
+  data-engine's dependencies on first start, then caches them).
+- **Air-gapped bundle** (`seedwright-<version>-offline-<platform>.tar.gz`): **Java 21+** and
+  **Python 3.12** (with `venv`). No uv, and **no network at all** — it ships a `wheelhouse/`
+  and builds the data-engine's virtualenv offline on first start. The bundle is
+  platform-specific (its wheels are built for one OS/arch); use the one matching this host.
+
+Either way, Maven, Node, and npm are **build-host only** — you don't need them here.
 
 Optional authoring models (the default `heuristic` provider needs neither):
 - `provider=copilot-cli` — GitHub Copilot CLI (`copilot`, authenticated) as the authoring LLM.
